@@ -1,8 +1,7 @@
-## se7en IPTV Player 1.0.2
+## se7en IPTV Player 1.0.3
 
-- **Abonnements refusés alors que les codes sont bons** : certains fournisseurs n'acceptent que les lecteurs qu'ils
-  connaissent. se7en IPTV Player réessaie maintenant tout seul en se présentant comme VLC, puis comme un navigateur,
-  et garde ce qui marche pour la lecture et les enregistrements.
+- **Plein écran réparé** : la vidéo remplit tout l'écran (elle restait sur la moitié du haut), et la fenêtre passe bien
+  par-dessus la barre des tâches, même quand elle était agrandie.
 
 ## Installation
 Installe ou mets à jour depuis **Seventh OS**, ou télécharge `se7en-IPTV-Player-Setup.exe` ci-dessous.

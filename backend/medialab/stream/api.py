@@ -43,6 +43,7 @@ class Session:
         self.digits = ""
         self.digit_timer: threading.Timer | None = None
         self.fullscreen = False
+        self.was_maximized = False
 
     def settings(self) -> dict:
         return {**DEFAULTS, **(self.store.get_meta("settings", {}) or {})}
@@ -296,6 +297,30 @@ def register(app: FastAPI, S) -> None:
             play(PlayBody(type="live", id=nxt))
             bus.publish("player", {"event": "zapped", "id": nxt})
 
+    def _window_fullscreen(window, on: bool) -> None:
+        """Borderless full screen over the taskbar, from a normal or a maximized window, and back as it was.
+
+        pywebview keeps a maximized window maximized when it removes the border: Windows then leaves it on the work
+        area and the taskbar shows through under it. So a maximized window is restored first, and maximized again on
+        the way back. Its own fullscreen flag decides the toggle, so the window and the app can never disagree."""
+        form = None
+        try:
+            from webview.platforms.winforms import BrowserView
+            form = BrowserView.instances.get(window.uid)
+        except Exception:  # noqa: BLE001  (another GUI backend)
+            pass
+        if form is not None and bool(getattr(form, "is_fullscreen", False)) == on:
+            return
+        if on:
+            sess.was_maximized = form is not None and str(form.WindowState) == "Maximized"
+            if sess.was_maximized:
+                window.restore()
+            window.toggle_fullscreen()
+        else:
+            window.toggle_fullscreen()
+            if getattr(sess, "was_maximized", False):
+                window.maximize()
+
     def set_fullscreen(on: bool | None = None) -> bool:
         from .. import system
         on = (not sess.fullscreen) if on is None else on
@@ -303,7 +328,7 @@ def register(app: FastAPI, S) -> None:
             sess.fullscreen = on
             if system.window is not None:
                 try:
-                    system.window.toggle_fullscreen()
+                    _window_fullscreen(system.window, on)
                 except Exception:  # noqa: BLE001
                     log.exception("fullscreen")
             bus.publish("player", {"event": "fullscreen", "on": on})

@@ -147,7 +147,7 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 
 /* theater (fullscreen video): the window fills the screen, chrome hidden */
 .sx-root.is-theater .sx-dock, .sx-root.is-theater .sx-top { display: none; }
-.sx-root.is-theater .sx-window { inset: 0 !important; border-radius: 0 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: #000 !important; box-shadow: none !important; }
+.sx-root.is-theater .sx-window { inset: 0 !important; border: 0 !important; padding: 0 !important; border-radius: 0 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: #000 !important; box-shadow: none !important; }
 .sx-root.is-theater .sx-window::after { display: none; }
 
 /* ================================================================ 4. common pieces */
@@ -288,8 +288,9 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 
 .st-video { position: relative; aspect-ratio: 16 / 9; width: 100%; max-height: 58vh; border-radius: var(--radius-xl); background: #050608; overflow: hidden; flex-shrink: 0; box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
 .st-video-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-tertiary); font: var(--fw-medium) 14px/1.3 var(--font-sans); text-align: center; padding: 20px; }
-.st-video-theater { position: fixed !important; inset: 0; width: auto; max-height: none; aspect-ratio: auto; border-radius: 0; z-index: 200; background: #000; }
 .st-live-video { max-height: 52vh; }
+/* after .st-live-video: the same specificity would otherwise keep the video to the top half of the screen */
+.st-video.st-video-theater { position: fixed !important; inset: 0; width: auto; height: auto; max-height: none; aspect-ratio: auto; border-radius: 0; z-index: 200; background: #000; box-shadow: none; }
 
 .st-controls { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 .st-controls-row { gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--liquid-sheen), rgba(255, 255, 255, .10); box-shadow: inset 0 1px 1px rgba(255, 255, 255, .4); }

@@ -2,6 +2,12 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.0.3": {
+        "fr": ["Plein écran réparé : la vidéo remplit tout l'écran (elle restait sur la moitié du haut), et la fenêtre "
+               "passe bien par-dessus la barre des tâches même quand elle était agrandie."],
+        "en": ["Full screen fixed: the video fills the whole screen (it stayed on the top half), and the window goes "
+               "over the taskbar even when it was maximized."],
+    },
     "1.0.2": {
         "fr": ["Abonnements refusés alors que les codes sont bons : certains fournisseurs n'acceptent que les lecteurs "
                "qu'ils connaissent. se7en IPTV Player réessaie maintenant tout seul en se présentant comme VLC, puis "
