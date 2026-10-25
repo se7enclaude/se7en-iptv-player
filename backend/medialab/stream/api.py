@@ -20,7 +20,7 @@ from ..logging_setup import get_logger
 from . import catalog, recorder, sync
 from .player import Player
 from .store import Store, check_pin, hash_pin
-from .xtream import XtreamClient, account_problem, as_int, as_str, connections, normalize_server, redact
+from .xtream import USER_AGENT, XtreamClient, account_problem, as_int, as_str, connections, normalize_server, redact
 
 log = get_logger("stream")
 
@@ -429,7 +429,9 @@ def register(app: FastAPI, S) -> None:
                     "expires": as_int(ui.get("exp_date")), "trial": as_str(ui.get("is_trial")) == "1",
                     "active": active, "max": mx, "formats": ui.get("allowed_output_formats") or [],
                     "timezone": as_str((data.get("server_info") or {}).get("timezone")), "counts": counts,
-                    "problem": problem[1] if problem else None, "info": data}
+                    "problem": problem[1] if problem else None, "info": data,
+                    # the user agent the server accepted, when it refused ours (kept with the account)
+                    "user_agent": c.user_agent if not body.user_agent and c.user_agent != USER_AGENT else ""}
 
     def start_sync(aid: str, what: str = "all") -> dict:
         account = store.account(aid)
@@ -454,7 +456,7 @@ def register(app: FastAPI, S) -> None:
                 a = store.add_account("xtream", body.name.strip() or normalize_server(body.server).split("//")[-1],
                                       server=normalize_server(body.server), username=body.username.strip(),
                                       password=body.password or "", epg_url=body.epg_url.strip(), output=body.output,
-                                      user_agent=body.user_agent, info={"user_info": info.get("user_info") or {},
+                                      user_agent=body.user_agent or res.pop("user_agent", ""), info={"user_info": info.get("user_info") or {},
                                                                         "server_info": info.get("server_info") or {}})
             sess.account = a["id"]
             store.set_meta("active_account", a["id"])

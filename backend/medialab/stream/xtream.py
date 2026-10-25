@@ -23,6 +23,11 @@ from ..logging_setup import get_logger
 
 log = get_logger("stream")
 USER_AGENT = "se7en IPTV Player"
+# Some providers (often behind a proxy) only answer the players they know and reply 401 / 403 to anyone else, even with
+# good codes. With no user agent chosen in the account, these are tried in turn after a refusal.
+FALLBACK_AGENTS = ("VLC/3.0.21 LibVLC/3.0.21",
+                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/141.0.0.0 Safari/537.36")
 RETRIES = 3
 
 
@@ -150,11 +155,13 @@ def connections(user_info: dict) -> tuple[int, int | None]:
 # ------------------------------------------------------------------ client
 class XtreamClient:
     def __init__(self, server: str, username: str, password: str, *, timeout: float = 25.0,
-                 client: httpx.Client | None = None, user_agent: str = USER_AGENT) -> None:
+                 client: httpx.Client | None = None, user_agent: str = "") -> None:
         self.creds = Creds(normalize_server(server), username.strip(), password.strip())
         self._own = client is None
         self.http = client or httpx.Client(timeout=httpx.Timeout(timeout, connect=10.0), follow_redirects=True,
                                            headers={"User-Agent": user_agent or USER_AGENT})
+        self.http.headers["User-Agent"] = self.user_agent = user_agent or USER_AGENT
+        self._fallbacks = [] if user_agent else list(FALLBACK_AGENTS)
         self.server_info: dict = {}
         self.user_info: dict = {}
 
@@ -176,20 +183,29 @@ class XtreamClient:
         q.update({k: v for k, v in params.items() if v is not None})
         url = f"{self.creds.server}/player_api.php"
         last: Exception | None = None
-        for attempt in range(RETRIES):
+        attempt = 0
+        while attempt < RETRIES:
+            attempt += 1
             try:
                 r = self.http.get(url, params=q)
             except httpx.HTTPError as e:
                 last = e
-                log.warning("Xtream %s: %s (try %d)", action or "auth", type(e).__name__, attempt + 1)
-                time.sleep(0.6 * (attempt + 1))
+                log.warning("Xtream %s: %s (try %d)", action or "auth", type(e).__name__, attempt)
+                time.sleep(0.6 * attempt)
+                continue
+            if r.status_code in (401, 403) and self._fallbacks:
+                ua = self._fallbacks.pop(0)
+                log.info("Xtream %s: %d, retrying as %s", action or "auth", r.status_code, ua.split("/")[0])
+                self.http.headers["User-Agent"] = self.user_agent = ua
+                attempt -= 1  # not a failed try: same request, another name
                 continue
             if r.status_code in (401, 403):
+                log.warning("Xtream %s: refused (%d)", action or "auth", r.status_code)
                 raise MediaLabError("auth_failed", "Identifiants refusés par le serveur.",
                                     "Vérifie le nom d'utilisateur, le mot de passe et l'adresse du serveur.")
             if r.status_code >= 500 or r.status_code == 429:
                 last = MediaLabError("server_error", f"Le serveur a répondu {r.status_code}.")
-                time.sleep(0.8 * (attempt + 1))
+                time.sleep(0.8 * attempt)
                 continue
             if r.status_code >= 400:
                 raise MediaLabError("server_error", f"Le serveur a répondu {r.status_code}.",

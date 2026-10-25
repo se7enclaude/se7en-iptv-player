@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.0.2": {
+        "fr": ["Abonnements refusés alors que les codes sont bons : certains fournisseurs n'acceptent que les lecteurs "
+               "qu'ils connaissent. se7en IPTV Player réessaie maintenant tout seul en se présentant comme VLC, puis "
+               "comme un navigateur, et garde ce qui marche pour la lecture et les enregistrements."],
+        "en": ["Subscriptions refused despite good codes: some providers only accept the players they know. se7en IPTV "
+               "Player now retries on its own as VLC, then as a browser, and keeps what works for playback and "
+               "recordings."],
+    },
     "1.0.1": {
         "fr": ["Nouveau logo : une télé rouge avec le 7 sur l'écran, pour ne plus confondre avec se7en Censored."],
         "en": ["New logo: a red TV with the 7 on its screen, so it no longer looks like se7en Censored."],

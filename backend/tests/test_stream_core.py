@@ -279,3 +279,24 @@ def test_xmltv_repairs_common_faults():
     progs = [i for k, i in got if k == "programme"]
     assert len(progs) == 3000 and progs[0]["title"] == "Tom & Jerry & Cie é 0"
     assert xmltv.parse_time("20261332250000 +0100") is None
+
+
+def test_provider_that_only_accepts_known_players():
+    """Behind some proxies a good login is refused (401) unless the player announces itself as one they know."""
+    app = make_app()
+
+    @app.middleware("http")
+    async def only_vlc(request, call_next):
+        from fastapi.responses import PlainTextResponse
+        if not request.headers.get("user-agent", "").startswith("VLC/"):
+            return PlainTextResponse("", status_code=401)
+        return await call_next(request)
+
+    c = client(app)
+    assert c.auth()["user_info"]["auth"] == 1
+    assert c.user_agent.startswith("VLC/") and len(c.live_categories()) > 0
+    # a user agent chosen in the account is kept as is: the refusal is then a real one
+    picked = X.XtreamClient("http://testserver", USER, PASS, client=TestClient(app), user_agent="MyBox/1.0")
+    with pytest.raises(MediaLabError) as e:
+        picked.auth()
+    assert e.value.code == "auth_failed" and picked.user_agent == "MyBox/1.0"
