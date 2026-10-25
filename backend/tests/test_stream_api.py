@@ -97,9 +97,12 @@ def test_full_flow(api, server, tmp_path):
 
     # enregistrement : refusé car l'abonnement n'a qu'une connexion et la lecture l'utilise
     rec = api.post("/api/stream/recordings", headers=H, json={"channel": ch["id"], "minutes": 1}).json()
-    time.sleep(0.5)
-    recs = api.get("/api/stream/recordings", headers=H).json()["recordings"]
-    mine = next(x for x in recs if x["id"] == rec["id"])
+    for _ in range(50):  # the refusal comes from the recorder thread: wait for it (a busy PC can take a while)
+        recs = api.get("/api/stream/recordings", headers=H).json()["recordings"]
+        mine = next(x for x in recs if x["id"] == rec["id"])
+        if mine["status"] not in ("scheduled", "recording"):
+            break
+        time.sleep(0.1)
     assert mine["status"] == "failed" and "connexion" in (mine["error"] or "")
     api.post("/api/stream/player", headers=H, json={"cmd": "stop"})
 

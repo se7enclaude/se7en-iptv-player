@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.0.4": {
+        "fr": ["Plus fluide : le défilement ne saccade plus (accueil, films, chaînes, guide), et les pages s'affichent "
+               "en entier trois fois plus vite.",
+               "Les infobulles des boutons du lecteur ne sont plus coupées par la vidéo."],
+        "en": ["Smoother: scrolling no longer stutters (home, movies, channels, guide), and pages show in full three "
+               "times faster.",
+               "Player button tooltips are no longer cut by the video."],
+    },
     "1.0.3": {
         "fr": ["Plein écran réparé : la vidéo remplit tout l'écran (elle restait sur la moitié du haut), et la fenêtre "
                "passe bien par-dessus la barre des tâches même quand elle était agrandie."],
