@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.0.1": {
+        "fr": ["Nouveau logo : une télé rouge avec le 7 sur l'écran, pour ne plus confondre avec se7en Censored."],
+        "en": ["New logo: a red TV with the 7 on its screen, so it no longer looks like se7en Censored."],
+    },
     "1.0.0": {
         "fr": ["Première version : ton abonnement Xtream Codes ou ta liste M3U, la TV en direct avec le guide des "
                "programmes, les films et séries avec reprise, le replay et les enregistrements, plusieurs profils "
