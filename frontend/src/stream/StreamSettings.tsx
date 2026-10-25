@@ -4,7 +4,8 @@ import { ReactNode, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Badge, Button, Field, Modal, Segmented, Switch } from "../components/ui";
 import { useApp } from "../store/app";
-import { Account, Profile, StreamSettings, stream } from "./api";
+import qrcode from "qrcode-generator";
+import { Account, Profile, RemoteInfo, StreamSettings, stream } from "./api";
 import { AccountForm } from "./AccountForm";
 import { Bar, PinField } from "./components";
 import { toastError, useStream } from "./store";
@@ -28,7 +29,11 @@ function useStreamSettings(): [StreamSettings | null, (p: Partial<StreamSettings
   }, []);
   const upd = (p: Partial<StreamSettings>) => {
     if (s) setS({ ...s, ...p });
-    stream.saveSettings(p).then((n) => { setS((cur) => ({ ...n, record_default: cur?.record_default } as StreamSettings)); useStream.getState().load(); }).catch(toastError);
+    stream.saveSettings(p).then((n) => {
+      setS((cur) => ({ ...n, record_default: cur?.record_default, tmdb: cur?.tmdb } as StreamSettings));
+      useStream.getState().load();
+      if ("group_quality" in p || "quality_pref" in p) useStream.getState().bump(); // lists regrouped
+    }).catch(toastError);
   };
   return [s, upd];
 }
@@ -216,6 +221,18 @@ export function PlaybackSettings() {
       <Row title="Format des chaînes" desc="MPEG-TS démarre plus vite ; HLS passe mieux sur certains réseaux. S'applique aux abonnements Xtream qui laissent le choix.">
         <Segmented value={s.output} onChange={(v) => upd({ output: v })} options={[{ value: "ts", label: "MPEG-TS" }, { value: "m3u8", label: "HLS" }]} />
       </Row>
+      <Row title="Zapping instantané" desc="La chaîne suivante est ouverte d'avance, en silence : ↑ ↓ l'affichent tout de suite. Utilise une connexion de plus, seulement si ton abonnement en a au moins 2 ; un enregistrement passe toujours avant.">
+        <Switch checked={s.instant_zap} onChange={(v) => upd({ instant_zap: v })} />
+      </Row>
+      <Row title="Regrouper SD / HD / FHD / 4K" desc="Une seule ligne par chaîne ou par film ; les autres versions se choisissent dans sa fiche ou sous la vidéo.">
+        <Switch checked={s.group_quality} onChange={(v) => upd({ group_quality: v })} />
+      </Row>
+      {s.group_quality && (
+        <Row title="Qualité préférée" desc="La version lancée d'office. En dessous de la meilleure, on prend la plus proche (utile avec une petite connexion).">
+          <Segmented value={s.quality_pref} onChange={(v) => upd({ quality_pref: v as StreamSettings["quality_pref"] })}
+            options={[{ value: "best", label: "Meilleure" }, { value: "fhd", label: "FHD" }, { value: "hd", label: "HD" }, { value: "sd", label: "SD" }]} />
+        </Row>
+      )}
       <Row title="Décodage matériel" desc="La carte graphique décode la vidéo (moins de processeur, 4K fluide). Désactive-le si l'image a des défauts.">
         <Switch checked={s.hwdec !== "no"} onChange={(v) => upd({ hwdec: v ? "auto-safe" : "no" })} />
       </Row>
@@ -231,7 +248,43 @@ export function PlaybackSettings() {
       <Row title="User-Agent" desc="Seulement si ton fournisseur l'exige. Chaque abonnement peut aussi avoir le sien.">
         <input className="input mono" defaultValue={s.user_agent} onBlur={(e) => e.target.value !== s.user_agent && upd({ user_agent: e.target.value })} style={{ width: 220 }} />
       </Row>
+      <TmdbRow on={!!s.tmdb} />
     </>
+  );
+}
+
+/** Your own (free) TMDB key: French summaries, cast photos, backdrops and trailers on film and series sheets. */
+function TmdbRow({ on }: { on: boolean }) {
+  const [has, setHas] = useState(on);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setHas(on), [on]);
+  const save = async (k: string) => {
+    setBusy(true);
+    try {
+      const r = await stream.tmdbKey(k);
+      setHas(r.tmdb);
+      setKey("");
+      useApp.getState().toast({ kind: "success", title: r.tmdb ? "Fiches enrichies activées" : "Clé TMDB retirée" });
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Row title="Fiches enrichies (TMDB)"
+      desc={has ? "Activées : résumés en français, photos des acteurs, fonds et bandes-annonces viennent de TMDB." :
+        <>Optionnel : crée un compte gratuit sur <b>themoviedb.org</b>, puis copie ta « clé d'API » (Paramètres → API). Sans clé, les fiches utilisent les infos de ton fournisseur.</>}>
+      {has ? (
+        <Button size="sm" disabled={busy} onClick={() => save("")}>Retirer la clé</Button>
+      ) : (
+        <div className="row" style={{ gap: 8 }}>
+          <input className="input mono" type="password" placeholder="Clé d'API TMDB" value={key} onChange={(e) => setKey(e.target.value)} style={{ width: 200 }} autoComplete="off" />
+          <Button size="sm" variant="primary" loading={busy} disabled={!key.trim()} onClick={() => save(key.trim())}>Activer</Button>
+        </div>
+      )}
+    </Row>
   );
 }
 
@@ -320,6 +373,68 @@ export function BackupSettings() {
           </Field>
         </form>
       </Modal>
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ télécommande (téléphone)
+function Qr({ text, size = 176 }: { text: string; size?: number }) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  let d = "";
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (qr.isDark(y, x)) d += `M${x} ${y}h1v1h-1z`;
+  return (
+    <svg className="st-qr" width={size} height={size} viewBox={`-2 -2 ${n + 4} ${n + 4}`} role="img" aria-label="QR code de la télécommande" shapeRendering="crispEdges">
+      <rect x={-2} y={-2} width={n + 4} height={n + 4} fill="#fff" />
+      <path d={d} fill="#0b0b0e" />
+    </svg>
+  );
+}
+
+export function RemoteSettings() {
+  const [r, setR] = useState<RemoteInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    stream.remote().then(setR).catch(toastError);
+  }, []);
+  const set = async (enabled: boolean, reset = false) => {
+    setBusy(true);
+    try {
+      const n = await stream.setRemote(enabled, reset);
+      setR(n);
+      if (enabled && !n.enabled) useApp.getState().toast({ kind: "error", title: n.error || "La télécommande n'a pas pu démarrer." });
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!r) return null;
+  return (
+    <>
+      <Row title="Télécommande sur le téléphone" desc="Zappe, règle le son, mets en pause et choisis une chaîne depuis ton téléphone, sur le même Wi-Fi que ce PC. Rien à installer : le téléphone ouvre une page web.">
+        <Switch checked={r.enabled} disabled={busy} onChange={(v) => set(v)} />
+      </Row>
+      {r.enabled && (
+        <div className="st-remote">
+          <Qr text={r.url} />
+          <div className="col" style={{ gap: 8, minWidth: 0 }}>
+            <b>Scanne ce code avec l'appareil photo du téléphone</b>
+            <span className="muted st-small">ou ouvre cette adresse dans son navigateur :</span>
+            <code className="st-remote-url">{r.url}</code>
+            <span className="muted st-small">
+              Le lien contient une clé secrète : garde-le pour toi. Si Windows demande l'accès au réseau, autorise-le sur les
+              réseaux privés.
+            </span>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <Button size="sm" onClick={() => navigator.clipboard?.writeText(r.url).then(() => useApp.getState().toast({ kind: "success", title: "Lien copié" }))}>Copier le lien</Button>
+              <Button size="sm" disabled={busy} onClick={() => set(true, true)}>Nouveau lien (l'ancien ne marchera plus)</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

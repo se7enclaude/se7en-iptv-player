@@ -3,7 +3,8 @@ import { AlarmClock, Archive, CircleDot, EyeOff, History, Lock, Search, Star, X 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty } from "../../components/ui";
 import { useApp } from "../../store/app";
-import { Category, Item, Programme, stream } from "../../stream/api";
+import { Category, isOf, Item, Programme, stream } from "../../stream/api";
+import { QualityPicker } from "../../stream/components";
 import { Bar, Logo, UnlockModal, VideoSurface, VirtualList, day, hm, progressOf, toggleFav, useNow } from "../../stream/components";
 import { PlayerControls, RecordNow, usePlayerState } from "../../stream/PlayerControls";
 import { toastError, useStream } from "../../stream/store";
@@ -38,7 +39,10 @@ function ChannelRow({ ch, on, onClick, onFav, now }: { ch: Item; on: boolean; on
       <span className="st-ch-num mono">{ch.num ?? ""}</span>
       <Logo src={ch.logo} name={ch.name} size={40} />
       <span className="st-ch-text">
-        <span className="st-ch-name">{ch.name}</span>
+        <span className="st-ch-name">
+          {ch.name}
+          {!!ch.variants?.length && <span className="st-q-mini">{ch.variants.map((v) => v.quality || "?").join(" · ")}</span>}
+        </span>
         {ch.now ? (
           <>
             <span className="st-ch-now">{ch.now.title}</span>
@@ -179,17 +183,17 @@ export function LivePage() {
   }, [load]);
 
   const current = useMemo(() => (playing?.kind === "live" ? playing.id : null), [playing]);
-  const index = items.findIndex((c) => c.id === (selected?.id ?? current));
+  const index = items.findIndex((c) => (selected ? c.id === selected.id : isOf(c, current)));
   useEffect(() => {
-    if (current && (!selected || selected.id !== current)) {
-      const c = items.find((x) => x.id === current);
+    if (current && !isOf(selected, current)) {
+      const c = items.find((x) => isOf(x, current));
       if (c) setSelected(c);
     }
   }, [current, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = (c: Item) => {
     setSelected(c);
-    if (c.id !== current) play({ type: "live", id: c.id });
+    if (!isOf(c, current)) play({ type: "live", id: c.id });
   };
 
   // keyboard: ↑ ↓ zap in the list, digits, backspace = previous channel, F fullscreen, space pause
@@ -244,7 +248,7 @@ export function LivePage() {
             scrollTo={index}
             onEnd={() => items.length < total && load(items.length)}
             render={(c) => (
-              <ChannelRow ch={c} now={nowTs} on={c.id === (sel?.id ?? current)} onClick={() => open(c)}
+              <ChannelRow ch={c} now={nowTs} on={sel ? c.id === sel.id : isOf(c, current)} onClick={() => open(c)}
                 onFav={() => toggleFav("live", c.id, !c.fav, () => setItems((cur) => cur.map((x) => (x.id === c.id ? { ...x, fav: !c.fav } : x))))} />
             )}
           />
@@ -269,6 +273,9 @@ export function LivePage() {
               <Button iconOnly size="sm" icon={<EyeOff size={16} />} tip="Masquer cette chaîne"
                 onClick={async () => { await stream.hide("live", sel.id, true).catch(toastError); setItems((cur) => cur.filter((x) => x.id !== sel.id)); }} />
             </div>
+            {!!sel.variants?.length && (
+              <QualityPicker variants={sel.variants} current={isOf(sel, current) ? current : null} onPick={(id) => play({ type: "live", id })} />
+            )}
             <ChannelGuide ch={sel} now={nowTs} />
           </div>
         ) : (

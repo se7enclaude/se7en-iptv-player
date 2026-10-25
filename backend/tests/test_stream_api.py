@@ -143,3 +143,22 @@ def test_full_flow(api, server, tmp_path):
     assert api.post("/api/stream/backup/import", headers=H, json={"path": str(f), "password": "motdepasse"}).json()["accounts"] == 0
 
     api.post("/api/stream/parental/pin", headers=H, json={"pin": "1234", "new_pin": ""})
+
+
+
+def test_phone_remote(tmp_path):
+    """La télécommande : rien sans la clé ; avec elle, l'état et les commandes passent par les fonctions de l'appli."""
+    from medialab.stream.remote import Remote
+    from medialab.stream.store import Store
+    calls = []
+    r = Remote(Store(tmp_path / "s.db"), lambda: {"playing": False, "channels": []}, lambda c, v: calls.append((c, v)))
+    tc = TestClient(r._app())
+    tok = r.token()
+    assert tc.get("/r/wrong").status_code == 404 and tc.get("/r/wrong/api/state").status_code == 404
+    page = tc.get(f"/r/{tok}")
+    assert page.status_code == 200 and "télécommande" in page.text and page.headers["cache-control"] == "no-store"
+    assert tc.get(f"/r/{tok}/api/state").json() == {"playing": False, "channels": []}
+    assert tc.post(f"/r/{tok}/api/cmd", json={"cmd": "zap", "value": 1}).json()["ok"] is True
+    assert calls == [("zap", 1)]
+    old = tok
+    assert r.new_token() != old and tc.get(f"/r/{old}").status_code == 404

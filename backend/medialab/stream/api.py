@@ -27,7 +27,8 @@ log = get_logger("stream")
 DEFAULTS = {"output": "ts", "hwdec": "auto-safe", "buffer_s": 10, "buffer_mb": 150, "audio_lang": "fr,fre,fra,en,eng",
             "sub_lang": "fr,fre,fra", "record_folder": "", "margin_before": 1, "margin_after": 3, "refresh_hours": 12,
             "refresh_on_start": True, "hide_adult": True, "parental_pin": None, "volume": 100, "user_agent": "",
-            "language": "fr"}
+            "language": "fr", "group_quality": True, "quality_pref": "best", "instant_zap": True,
+            "remote": False}
 
 
 class Session:
@@ -40,13 +41,18 @@ class Session:
         self.adult_until = 0.0
         self.last_channel: dict[str, str] = {}
         self.prev_channel: dict[str, str] = {}
+        self.zap_dir: dict[str, int] = {}  # sens du dernier zapping (+1 / -1) : la chaîne ouverte d'avance
         self.digits = ""
         self.digit_timer: threading.Timer | None = None
         self.fullscreen = False
-        self.was_maximized = False
 
     def settings(self) -> dict:
         return {**DEFAULTS, **(self.store.get_meta("settings", {}) or {})}
+
+    def quality(self) -> str:
+        """Préférence de qualité pour regrouper les versions SD / HD / FHD / 4K ("" : ne pas regrouper)."""
+        s = self.settings()
+        return (s.get("quality_pref") or "best") if s.get("group_quality", True) else ""
 
     def show_adult(self) -> bool:
         prof = next((p for p in self.store.profiles() if p["id"] == self.profile), None)
@@ -282,55 +288,163 @@ def register(app: FastAPI, S) -> None:
                 start_at = catalog.resume_point(store, sess.profile, aid, "episode", body.id)
         url = resolve(account, body.type, body.id)
         player.play(url, item, start_at, account.get("user_agent") or sess.settings()["user_agent"])
+        if player.preloaded() is None:  # la chaîne ouverte d'avance vient d'être affichée (ou il n'y en avait pas)
+            conns.release(aid, "preload")
+        if body.type == "live":
+            schedule_preload(account, body.id)
+        else:
+            player.drop_preload()
+            conns.release(aid, "preload")
         bus.publish("player", {"event": "started", "item": item})
         return {"item": item, "resumed_at": start_at}
+
+    def schedule_preload(account: dict, cur: str) -> None:
+        """Zapping instantané : 1,5 s après le début d'une chaîne, ouvre d'avance la suivante (dans le sens du dernier
+        zapping), si l'abonnement a une connexion de libre. Elle cède sa place à tout enregistrement."""
+        aid = account["id"]
+        if not sess.settings().get("instant_zap", True):
+            return
+        mx = max_cons(account)
+        if mx is not None and mx < 2:
+            return
+
+        def run() -> None:
+            time.sleep(1.5)
+            if sess.last_channel.get(aid) != cur or not player.item or player.item.get("id") != cur:
+                return
+            row = store.one("SELECT category FROM channels WHERE account=? AND id=?", (aid, cur))
+            if not row:
+                return
+            ids = catalog.group_ids(store, aid, "live", sess.profile, sess.show_adult(), row["category"], sess.quality())
+            here = cur if cur in ids else next((i for i in catalog.group_of(store, aid, "live", cur) if i in ids), None)
+            if not here or len(ids) < 2:
+                return
+            nxt = ids[(ids.index(here) + sess.zap_dir.get(aid, 1)) % len(ids)]
+            if player.preloaded() == nxt:
+                return
+            try:
+                conns.take(aid, "preload", "le zapping instantané", mx)
+                player.preload(resolve(account, "live", nxt), {"account": aid, "kind": "live", "id": nxt},
+                               account.get("user_agent") or sess.settings()["user_agent"])
+            except MediaLabError:
+                conns.release(aid, "preload")
+            except Exception:  # noqa: BLE001  (le zapping instantané n'est qu'un plus)
+                log.exception("preload")
+                conns.release(aid, "preload")
+        threading.Thread(target=run, name="preload", daemon=True).start()
+
+    # ---------------------------------------------------------------- télécommande (téléphone)
+    def remote_state() -> dict:
+        a = store.account(sess.account) if sess.account else None
+        item = player.item or {}
+        st = player.snapshot(light=True)
+        out: dict = {"playing": bool(player.item), "title": item.get("title") or "", "subtitle": item.get("subtitle") or "",
+                     "kind": item.get("kind") or "", "id": item.get("id") or "", "number": item.get("number"),
+                     "logo": item.get("logo") or "", "paused": bool(st.get("paused")), "volume": int(st.get("volume") or 0),
+                     "muted": bool(st.get("muted")), "fullscreen": sess.fullscreen, "channels": [], "favorites": []}
+        if not a:
+            return out
+        if item.get("kind") == "live":
+            ch = [{"epg_id": item.get("epg_id")}]
+            catalog._attach_now(store, a["id"], ch)
+            out["now"], out["next"] = ch[0].get("now"), ch[0].get("next")
+        keep = ("id", "name", "num", "logo", "now")
+
+        def slim(rows: list[dict]) -> list[dict]:
+            return [{k: (r.get(k)["title"] if k == "now" and r.get(k) else r.get(k)) for k in keep} for r in rows]
+        out["favorites"] = slim(catalog.items(store, a["id"], "live", sess.profile, sess.show_adult(), "__fav", limit=60,
+                                              quality=sess.quality())["items"])
+        cur = sess.last_channel.get(a["id"])
+        row = store.one("SELECT category FROM channels WHERE account=? AND id=?", (a["id"], cur)) if cur else None
+        out["channels"] = slim(catalog.items(store, a["id"], "live", sess.profile, sess.show_adult(),
+                                             row["category"] if row else "__all", limit=300, quality=sess.quality())["items"])
+        return out
+
+    def remote_command(cmd: str, value) -> object:
+        if cmd == "zap":
+            zap(1 if int(value or 1) > 0 else -1)
+        elif cmd == "channel":
+            play(PlayBody(type="live", id=str(value)))
+        elif cmd == "previous":
+            on_action("previous_channel", {})
+        elif cmd == "digit" and str(value) in "0123456789" and len(str(value)) == 1:
+            on_action("digit", {"digit": str(value)})
+        elif cmd == "pause":
+            player.toggle_pause()
+        elif cmd == "mute":
+            player.toggle_mute()
+        elif cmd == "volume":
+            player.volume(delta=max(-20, min(20, float(value or 0))))
+        elif cmd == "seek":
+            player.seek(max(-600, min(600, float(value or 0))))
+        elif cmd == "fullscreen":
+            return set_fullscreen(None)
+        elif cmd == "stop":
+            player.stop()
+            conns.release(sess.account or "", "player")
+            conns.release(sess.account or "", "preload")
+        elif cmd == "osd":
+            player.show_osd(6)
+        else:
+            raise MediaLabError("invalid", "Action inconnue.")
+        return None
+
+    from .remote import DEFAULT_PORT, Remote
+    remote = Remote(store, remote_state, remote_command)
+    S.remote = remote  # type: ignore[attr-defined]
+    if sess.settings().get("remote"):
+        threading.Thread(target=remote.start, name="remote-start", daemon=True).start()
+
+    @app.get("/api/stream/remote")
+    async def remote_get():
+        return remote.info()
+
+    @app.post("/api/stream/remote")
+    async def remote_set(body: dict):
+        def run():
+            on = bool(body.get("enabled"))
+            if body.get("reset"):
+                remote.new_token()
+            info = remote.start(DEFAULT_PORT) if on else remote.stop()
+            cur = store.get_meta("settings", {}) or {}
+            cur["remote"] = info["enabled"]
+            store.set_meta("settings", cur)
+            return info
+        return await run_in_threadpool(run)
+
+    def evict_preload(aid: str) -> None:
+        player.drop_preload()
+    conns.on_evict = evict_preload
 
     def zap(delta: int) -> None:
         aid = sess.account
         cur = sess.last_channel.get(aid or "")
         if not aid or not cur:
             return
-        ids = [r["id"] for r in store.q("SELECT id FROM channels WHERE account=? AND category=(SELECT category FROM channels "
-                                         "WHERE account=? AND id=?) ORDER BY position", (aid, aid, cur))]
-        if cur in ids:
-            nxt = ids[(ids.index(cur) + delta) % len(ids)]
+        sess.zap_dir[aid] = 1 if delta > 0 else -1
+        row = store.one("SELECT category FROM channels WHERE account=? AND id=?", (aid, cur))
+        if not row:
+            return
+        # the list as shown (one version per SD / HD / FHD / 4K group): a channel watched in another quality zaps from its group
+        ids = catalog.group_ids(store, aid, "live", sess.profile, sess.show_adult(), row["category"], sess.quality())
+        here = cur if cur in ids else next((i for i in catalog.group_of(store, aid, "live", cur) if i in ids), None)
+        if here:
+            nxt = ids[(ids.index(here) + delta) % len(ids)]
             play(PlayBody(type="live", id=nxt))
             bus.publish("player", {"event": "zapped", "id": nxt})
 
-    def _window_fullscreen(window, on: bool) -> None:
-        """Borderless full screen over the taskbar, from a normal or a maximized window, and back as it was.
-
-        pywebview keeps a maximized window maximized when it removes the border: Windows then leaves it on the work
-        area and the taskbar shows through under it. So a maximized window is restored first, and maximized again on
-        the way back. Its own fullscreen flag decides the toggle, so the window and the app can never disagree."""
-        form = None
-        try:
-            from webview.platforms.winforms import BrowserView
-            form = BrowserView.instances.get(window.uid)
-        except Exception:  # noqa: BLE001  (another GUI backend)
-            pass
-        if form is not None and bool(getattr(form, "is_fullscreen", False)) == on:
-            return
-        if on:
-            sess.was_maximized = form is not None and str(form.WindowState) == "Maximized"
-            if sess.was_maximized:
-                window.restore()
-            window.toggle_fullscreen()
-        else:
-            window.toggle_fullscreen()
-            if getattr(sess, "was_maximized", False):
-                window.maximize()
-
     def set_fullscreen(on: bool | None = None) -> bool:
-        from .. import system
+        """Plein écran de la vidéo seule, dans sa propre fenêtre sur tout l'écran (player.Host) : elle prend toujours
+        toute la place, garde le clavier (Échap / F / flèches) et montre un bouton pour en sortir."""
         on = (not sess.fullscreen) if on is None else on
+        if on and not player.item:
+            on = False
         if on != sess.fullscreen:
             sess.fullscreen = on
-            if system.window is not None:
-                try:
-                    _window_fullscreen(system.window, on)
-                except Exception:  # noqa: BLE001
-                    log.exception("fullscreen")
+            try:
+                player.set_fullscreen(on)
+            except Exception:  # noqa: BLE001
+                log.exception("fullscreen")
             bus.publish("player", {"event": "fullscreen", "on": on})
         return on
 
@@ -390,6 +504,7 @@ def register(app: FastAPI, S) -> None:
             if c == "stop":
                 player.stop()
                 conns.release(sess.account or "", "player")
+                conns.release(sess.account or "", "preload")
             elif c == "pause":
                 player.toggle_pause()
             elif c == "seek":
@@ -519,6 +634,7 @@ def register(app: FastAPI, S) -> None:
         if sess.account != aid:
             player.stop()
             conns.release(sess.account or "", "player")
+            conns.release(sess.account or "", "preload")
         sess.account = aid
         store.set_meta("active_account", aid)
         return {"ok": True}
@@ -551,9 +667,12 @@ def register(app: FastAPI, S) -> None:
             a = sess.require_account()
             return {"continue": catalog.continue_watching(store, sess.profile, a["id"]),
                     "recent": catalog.recent_channels(store, sess.profile, a["id"]),
-                    "favorites": catalog.items(store, a["id"], "live", sess.profile, sess.show_adult(), "__fav", limit=24)["items"],
-                    "movies": catalog.items(store, a["id"], "movie", sess.profile, sess.show_adult(), "__recent", limit=24)["items"],
-                    "series": catalog.items(store, a["id"], "series", sess.profile, sess.show_adult(), "__recent", limit=24)["items"]}
+                    "favorites": catalog.items(store, a["id"], "live", sess.profile, sess.show_adult(), "__fav", limit=24,
+                                               quality=sess.quality())["items"],
+                    "movies": catalog.items(store, a["id"], "movie", sess.profile, sess.show_adult(), "__recent", limit=24,
+                                            quality=sess.quality())["items"],
+                    "series": catalog.items(store, a["id"], "series", sess.profile, sess.show_adult(), "__recent", limit=24,
+                                            quality=sess.quality())["items"]}
         return await run_in_threadpool(run)
 
     @app.get("/api/stream/categories/{typ}")
@@ -569,14 +688,14 @@ def register(app: FastAPI, S) -> None:
             raise MediaLabError("invalid", "Type inconnu.")
         a = sess.require_account()
         return await run_in_threadpool(catalog.items, store, a["id"], typ, sess.profile, sess.show_adult(), category, q,
-                                       offset, min(500, limit), sort)
+                                       offset, min(500, limit), sort, sess.quality())
 
     @app.get("/api/stream/guide")
     async def guide(category: str = "__all", start: int = 0, hours: int = 4, offset: int = 0, limit: int = 60):
         a = sess.require_account()
         start = start or int(time.time() // 1800 * 1800 - 1800)
         return await run_in_threadpool(catalog.guide, store, a["id"], sess.profile, sess.show_adult(), category, start,
-                                       max(1, min(24, hours)), offset, min(200, limit))
+                                       max(1, min(24, hours)), offset, min(200, limit), sess.quality())
 
     @app.get("/api/stream/channel/{cid}/epg")
     async def channel_epg(cid: str):
@@ -586,7 +705,8 @@ def register(app: FastAPI, S) -> None:
     @app.get("/api/stream/search")
     async def search(q: str):
         a = sess.require_account()
-        return await run_in_threadpool(catalog.search_all, store, a["id"], sess.profile, sess.show_adult(), q)
+        from . import search as smart
+        return await run_in_threadpool(smart.search, store, a["id"], sess.profile, sess.show_adult(), q, sess.quality())
 
     @app.get("/api/stream/vod/{vid}")
     async def vod(vid: str):
@@ -598,6 +718,7 @@ def register(app: FastAPI, S) -> None:
             finally:
                 if c:
                     c.close()
+            catalog.enrich(store, a["id"], "movie", d, sess.profile, sess.show_adult(), sess.quality())
             d["resume"] = catalog.resume_point(store, sess.profile, a["id"], "movie", vid)
             d["fav"] = bool(store.one("SELECT 1 FROM favorites WHERE profile=? AND account=? AND type='movie' AND item=?",
                                       (sess.profile, a["id"], vid)))
@@ -614,6 +735,7 @@ def register(app: FastAPI, S) -> None:
             finally:
                 if c:
                     c.close()
+            catalog.enrich(store, a["id"], "series", d, sess.profile, sess.show_adult(), sess.quality())
             d["fav"] = bool(store.one("SELECT 1 FROM favorites WHERE profile=? AND account=? AND type='series' AND item=?",
                                       (sess.profile, a["id"], sid)))
             return d
@@ -809,8 +931,25 @@ def register(app: FastAPI, S) -> None:
     # ---------------------------------------------------------------- réglages
     @app.get("/api/stream/settings")
     async def settings_get():
+        from . import tmdb
         s = sess.settings()
-        return {**s, "parental_pin": bool(s.get("parental_pin")), "record_default": str(recorder.default_folder())}
+        return {**s, "parental_pin": bool(s.get("parental_pin")), "record_default": str(recorder.default_folder()),
+                "tmdb": bool(tmdb.get_key(store))}
+
+    @app.post("/api/stream/tmdb")
+    async def tmdb_key(body: dict):
+        """Ta clé TMDB (gratuite, sur themoviedb.org) : vérifiée, puis gardée chiffrée. Vide = l'enlever."""
+        from . import tmdb
+
+        def run():
+            key = str(body.get("key") or "").strip()
+            if key and not tmdb.check_key(key):
+                raise MediaLabError("tmdb_key", "TMDB refuse cette clé.",
+                                    "Copie la « clé d'API » ou le « jeton d'accès en lecture » de ton compte TMDB.")
+            tmdb.save_key(store, key)
+            store.run("DELETE FROM tmdb")  # fiches refaites avec (ou sans) la clé
+            return {"tmdb": bool(key)}
+        return await run_in_threadpool(run)
 
     @app.patch("/api/stream/settings")
     async def settings_patch(body: dict):
@@ -915,5 +1054,5 @@ def register(app: FastAPI, S) -> None:
     threading.Thread(target=auto_refresh, name="stream-refresh", daemon=True).start()
 
     from .. import system
-    system.on_quit(lambda: (rec.shutdown(), player.shutdown()))
+    system.on_quit(lambda: (rec.shutdown(), player.shutdown(), remote.stop()))
     app.state.stream = {"store": store, "session": sess, "player": player, "recorder": rec, "connections": conns}

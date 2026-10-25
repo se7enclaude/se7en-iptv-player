@@ -39,21 +39,29 @@ class Connections:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.used: dict[str, dict[str, str]] = {}  # compte -> {clé: description}
+        # « preload » (zapping instantané) cède sa place à tout le reste : appelé pour fermer cette chaîne d'avance
+        self.on_evict: Callable[[str], None] = lambda aid: None
 
     def count(self, aid: str) -> int:
         with self.lock:
             return len(self.used.get(aid, {}))
 
     def take(self, aid: str, key: str, what: str, maximum: int | None) -> None:
+        evicted = False
         with self.lock:
             cur = self.used.setdefault(aid, {})
             if key in cur:
                 return
+            if maximum is not None and len(cur) >= maximum and key != "preload" and "preload" in cur:
+                cur.pop("preload")
+                evicted = True
             if maximum is not None and len(cur) >= maximum:
                 busy = ", ".join(cur.values())
                 raise MediaLabError("max_connections", f"Ton abonnement permet {maximum} connexion(s) à la fois : déjà utilisée(s) par {busy}.",
                                     "Arrête une lecture ou un enregistrement, ou attends qu'il se termine.")
             cur[key] = what
+        if evicted:
+            self.on_evict(aid)
 
     def release(self, aid: str, key: str) -> None:
         with self.lock:

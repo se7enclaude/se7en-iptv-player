@@ -300,3 +300,114 @@ def test_provider_that_only_accepts_known_players():
     with pytest.raises(MediaLabError) as e:
         picked.auth()
     assert e.value.code == "auth_failed" and picked.user_agent == "MyBox/1.0"
+
+
+# ------------------------------------------------------------------ versions SD / HD / FHD / 4K
+def test_quality_names_are_grouped():
+    from medialab.stream import quality as Q
+    assert Q.parse("FR | TF1 FHD (HEVC)") == ("fr tf1", "FHD", 3)
+    assert Q.parse("FR: TF1 HD")[0] == Q.parse("FR: TF1 ᴴᴰ")[0] == Q.parse("FR - TF1 4K UHD")[0] == Q.parse("FR TF1")[0] == "fr tf1"
+    assert Q.parse("Canal+ Sport Full HD") == ("canal+ sport", "FHD", 3)
+    assert Q.parse("Dune (2021) 4K")[0] != Q.parse("Dune (1984)")[0]
+    assert Q.parse("HD1")[1] == "" and Q.parse("SD")[0] == "sd"
+
+
+def test_lists_show_one_version_per_group(tmp_path):
+    from medialab.stream import quality as Q
+    st = Store(tmp_path / "s.db")
+    names = ["TF1 SD", "TF1 HD", "TF1 FHD", "TF1 4K", "France 2 HD", "France 2 FHD", "Arte"]
+    st.many("INSERT INTO channels VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [("a", str(i), i + 1, n, norm(n), "", "c1", "", 0, 0, None, 0, i) for i, n in enumerate(names)])
+    Q.index(st, "a", "live")
+    best = catalog.items(st, "a", "live", "main", True, quality="best")
+    assert best["total"] == 3 and [r["name"] for r in best["items"]] == ["TF1 4K", "France 2 FHD", "Arte"]
+    tf1 = best["items"][0]
+    assert [v["quality"] for v in tf1["variants"]] == ["4K", "FHD", "HD", "SD"] and best["items"][2]["variants"] == []
+    # « HD » : la version HD, sinon la plus proche en dessous
+    hd = catalog.items(st, "a", "live", "main", True, quality="hd")
+    assert [r["name"] for r in hd["items"]] == ["TF1 HD", "France 2 HD", "Arte"]
+    assert catalog.items(st, "a", "live", "main", True)["total"] == 7  # sans regroupement : tout
+    assert catalog.group_ids(st, "a", "live", "main", True, "c1", "best") == ["3", "5", "6"]
+    assert sorted(catalog.group_of(st, "a", "live", "0")) == ["0", "1", "2", "3"]
+
+
+# ------------------------------------------------------------------ recherche intelligente
+def test_smart_search_tolerates_typos_and_finds_people(tmp_path):
+    from medialab.stream import quality as Q, search
+    st = Store(tmp_path / "s.db")
+    st.run("INSERT INTO accounts (id, kind, name, synced) VALUES ('a', 'xtream', 'x', 1)")
+    st.many("INSERT INTO categories VALUES (?,?,?,?,?,?)", [("a", "movie", "c1", "Films", 0, 0), ("a", "movie", "c2", "Comédie", 1, 0)])
+    films = ["Spider-Man: No Way Home", "Spider-Man 4K", "Léon", "Les Visiteurs", "Taxi 2", "Le Parrain"]
+    st.many("INSERT INTO vod VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            [("a", str(i), n, norm(n), "", "c2" if n == "Taxi 2" else "c1", 7.0, 2000, 0, "mp4", None, i) for i, n in enumerate(films)])
+    st.run("INSERT INTO people VALUES ('a', 'movie', '2', 'thriller', 'jean reno, natalie portman', 'luc besson')")
+    st.run("INSERT INTO people VALUES ('a', 'movie', '3', 'comedie', 'jean reno, christian clavier', 'jean-marie poire')")
+    Q.index(st, "a", "movie")
+
+    def names(q):
+        return [r["name"] for r in search.search(st, "a", "main", True, q, "best")["movie"]]
+    assert names("spidrman")[:1] in (["Spider-Man: No Way Home"], ["Spider-Man 4K"])
+    assert names("leon") == ["Léon"]  # accents
+    assert names("parain") == ["Le Parrain"]  # une faute
+    assert set(names("jean reno")) == {"Léon", "Les Visiteurs"}
+    r = search.search(st, "a", "main", True, "jean reno", "best")["movie"][0]
+    assert r["why"] == "Avec Jean Reno"
+    assert "Taxi 2" in names("comedie")  # catégorie
+    assert names("zzzz") == []
+
+
+# ------------------------------------------------------------------ zapping instantané
+def test_preload_gives_way_and_swaps():
+    from medialab.stream import player as P
+    from medialab.stream.recorder import Connections
+
+    # une chaîne ouverte d'avance cède sa connexion à un enregistrement
+    c = Connections()
+    evicted = []
+    c.on_evict = evicted.append
+    c.take("a", "player", "la lecture", 2)
+    c.take("a", "preload", "le zapping instantané", 2)
+    c.take("a", "rec:1", "un enregistrement", 2)
+    assert evicted == ["a"] and c.count("a") == 2
+    with pytest.raises(MediaLabError):
+        c.take("a", "preload", "le zapping instantané", 2)
+
+    class FakeMpv(dict):
+        def __init__(self):
+            super().__init__(volume=80, mute=False)
+            self.cmds = []
+        __getattr__ = dict.get
+
+        def __setattr__(self, k, v):
+            if k == "cmds":
+                return super().__setattr__(k, v)
+            self[k] = v
+
+        def command(self, *a):
+            self.cmds.append(a)
+
+        def loadfile(self, *a, **k):
+            self.cmds.append(("loadfile",) + a)
+
+    class FakeHost:
+        child = True
+
+        def __init__(self):
+            self.shown = None
+
+        def place(self, x, y, w, h, visible, radius=0):
+            self.shown = visible
+
+    p = P.Player("t", lambda: {})
+    p.mpv, p.host = FakeMpv(), FakeHost()
+    p.rect = {"x": 0, "y": 0, "w": 640, "h": 360, "dpr": 1.0, "visible": True, "radius": 0}
+    spare_m, spare_h = FakeMpv(), FakeHost()
+    p._spare = {"mpv": spare_m, "host": spare_h, "id": "5", "url": "http://s/live/u/p/5.ts", "since": 0}
+    old_m, old_h = p.mpv, p.host
+    p.play("http://s/live/u/p/5.ts", {"kind": "live", "id": "5", "title": "Cinq"})
+    assert p.mpv is spare_m and p.host is spare_h and spare_h.shown is True and old_h.shown is False
+    assert ("stop",) in old_m.cmds and spare_m["volume"] == 80 and spare_m["mute"] is False
+    assert p.preloaded() is None and p._spare["mpv"] is old_m and p.item["id"] == "5"
+    # une autre chaîne : chargement normal, sans échange
+    p.play("http://s/live/u/p/6.ts", {"kind": "live", "id": "6"})
+    assert p.mpv is spare_m and ("loadfile", "http://s/live/u/p/6.ts", "replace") in spare_m.cmds

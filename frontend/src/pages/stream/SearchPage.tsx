@@ -7,6 +7,9 @@ import { Logo, Poster, day, hm } from "../../stream/components";
 import { toastError, useStream } from "../../stream/store";
 import { MovieModal, SeriesModal } from "./VodPage";
 
+/** « 4K » on a poster that also exists in other qualities. */
+const variantBadge = (m: Item) => (m.variants?.length ? m.variants.find((v) => v.id === m.id)?.quality || undefined : undefined);
+
 type Results = { live: Item[]; movie: Item[]; series: Item[]; programmes: (Programme & { channel_id: string; channel_name: string; logo?: string })[] };
 
 /** One box for everything: channels, films, series and programmes of the guide. */
@@ -40,7 +43,11 @@ export function SearchPage() {
     <div className="st-page">
 
       <div className="page-head"><h1 className="page-title">{q ? `« ${q} »` : "Rechercher"}</h1></div>
-      {!res && <p className="muted" style={{ marginTop: 8 }}>Tape au moins deux lettres. Les accents et les majuscules ne comptent pas.</p>}
+      {!res && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          Tape au moins deux lettres : un titre (même avec une faute), un acteur, un réalisateur, un genre (« comédie ») ou une catégorie (« sport »).
+        </p>
+      )}
       {nothing && <Empty icon={<Search size={22} />} title="Rien trouvé" body={`Aucun résultat pour « ${q} ».`} />}
       {res?.live.length ? (
         <section className="st-row">
@@ -50,6 +57,7 @@ export function SearchPage() {
               <button key={c.id} className="st-tile" onClick={() => live(c.id)}>
                 <Logo src={c.logo} name={c.name} size={56} />
                 <span>{c.name}</span>
+                {!!c.variants?.length && <span className="st-tile-now">{c.variants.map((v) => v.quality || "?").join(" · ")}</span>}
                 {c.now && <span className="st-tile-now">{c.now.title}</span>}
               </button>
             ))}
@@ -75,13 +83,13 @@ export function SearchPage() {
       {res?.movie.length ? (
         <section className="st-row">
           <h2 className="st-row-title">Films</h2>
-          <div className="st-row-items">{res.movie.map((m) => <Poster key={m.id} src={m.logo} name={m.name} progress={m.progress} sub={m.year ?? undefined} onClick={() => setMovie(m.id)} />)}</div>
+          <div className="st-row-items">{res.movie.map((m) => <Poster key={m.id} src={m.logo} name={m.name} progress={m.progress} sub={m.why || m.year || undefined} badge={variantBadge(m)} onClick={() => setMovie(m.id)} />)}</div>
         </section>
       ) : null}
       {res?.series.length ? (
         <section className="st-row">
           <h2 className="st-row-title">Séries</h2>
-          <div className="st-row-items">{res.series.map((m) => <Poster key={m.id} src={m.logo} name={m.name} sub={m.year ?? undefined} onClick={() => setSeries(m.id)} />)}</div>
+          <div className="st-row-items">{res.series.map((m) => <Poster key={m.id} src={m.logo} name={m.name} sub={m.why || m.year || undefined} badge={variantBadge(m)} onClick={() => setSeries(m.id)} />)}</div>
         </section>
       ) : null}
       <MovieModal id={movie} onClose={() => setMovie(null)} />

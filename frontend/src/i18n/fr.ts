@@ -12,6 +12,7 @@ export const fr: Record<string, string> = {
   "settings.profiles": "Profils et contrôle parental",
   "settings.profiles.desc": "Favoris et historique séparés, contenus adultes verrouillés.",
   "settings.playback": "Lecture",
+  "settings.remote": "Télécommande",
   "settings.playback.desc": "Format des flux, décodage, mémoire tampon et langues.",
   "settings.recording": "Enregistrements et guide",
   "settings.recording.desc": "Dossier, marges et mise à jour du catalogue.",

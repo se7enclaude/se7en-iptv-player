@@ -2,6 +2,25 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.0": {
+        "fr": ["Nouveau plein écran : la vidéo prend tout l'écran, avec un bouton « Quitter le plein écran » (ou Échap), "
+               "Chaîne − / Chaîne + et le bandeau du programme. Image plus fluide (chaînes entrelacées désentrelacées, "
+               "images calées sur l'écran).",
+               "Zapping instantané : la chaîne suivante est ouverte d'avance (abonnements avec au moins 2 connexions).",
+               "SD / HD / FHD / 4K regroupés : une seule ligne par chaîne ou par film, la version de ton choix d'office.",
+               "Recherche intelligente : tolère les fautes, cherche aussi par acteur, réalisateur, genre et catégorie.",
+               "Fiches films et séries enrichies : genres, distribution, versions, titres similaires ; résumés en français, "
+               "photos et bandes-annonces avec ta clé TMDB (optionnelle).",
+               "Télécommande sur le téléphone : scanne le QR code dans Réglages → Télécommande."],
+        "en": ["New full screen: the video fills the screen, with an « Exit full screen » button (or Esc), channel up / down "
+               "and the programme banner. Smoother picture (interlaced channels deinterlaced, frames synced to the screen).",
+               "Instant zapping: the next channel is opened in advance (subscriptions with at least 2 connections).",
+               "SD / HD / FHD / 4K grouped: one line per channel or film, your preferred version by default.",
+               "Smart search: typo tolerant, also by actor, director, genre and category.",
+               "Richer film and series sheets: genres, cast, versions, similar titles; French summaries, photos and "
+               "trailers with your (optional) TMDB key.",
+               "Phone remote: scan the QR code in Settings → Phone remote."],
+    },
     "1.0.4": {
         "fr": ["Plus fluide : le défilement ne saccade plus (accueil, films, chaînes, guide), et les pages s'affichent "
                "en entier trois fois plus vite.",

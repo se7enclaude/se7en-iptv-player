@@ -144,6 +144,7 @@ events.on((ev) => {
     case "player":
       if (d.event === "fullscreen") useStream.setState({ theater: !!d.on });
       else if (d.event === "started") useStream.setState({ now: d.item ?? null });
+      else if (d.event === "stop") useStream.setState({ now: null, theater: false }); // e.g. from the phone remote
       else if (d.event === "zapped") stream.player().then((p) => useStream.setState({ now: p.item ?? null })).catch(() => undefined);
       else if (d.event === "ended" && d.item?.kind === "episode") nextEpisode(d.item).catch(toastError);
       else if (d.event === "ended") s.stop();

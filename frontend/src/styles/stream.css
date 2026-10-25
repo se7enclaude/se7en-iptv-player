@@ -145,10 +145,7 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 .sx-main > .page.st-bleed { padding: 0 20px 20px; overflow: hidden; flex-direction: row; }
 .sx-main > .page.sx-flush { padding: 0; overflow: hidden; }
 
-/* theater (fullscreen video): the window fills the screen, chrome hidden */
-.sx-root.is-theater .sx-dock, .sx-root.is-theater .sx-top { display: none; }
-.sx-root.is-theater .sx-window { inset: 0 !important; border: 0 !important; padding: 0 !important; border-radius: 0 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: #000 !important; box-shadow: none !important; }
-.sx-root.is-theater .sx-window::after { display: none; }
+/* full screen: the video gets its own window over the whole screen (player.Host), the page stays as it is */
 
 /* ================================================================ 4. common pieces */
 .st-link { background: none; border: 0; padding: 0; color: var(--text-primary); font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--white-a40); text-underline-offset: 3px; }
@@ -289,8 +286,6 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 .st-video { position: relative; aspect-ratio: 16 / 9; width: 100%; max-height: 58vh; border-radius: var(--radius-xl); background: #050608; overflow: hidden; flex-shrink: 0; box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
 .st-video-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-tertiary); font: var(--fw-medium) 14px/1.3 var(--font-sans); text-align: center; padding: 20px; }
 .st-live-video { max-height: 52vh; }
-/* after .st-live-video: the same specificity would otherwise keep the video to the top half of the screen */
-.st-video.st-video-theater { position: fixed !important; inset: 0; width: auto; height: auto; max-height: none; aspect-ratio: auto; border-radius: 0; z-index: 200; background: #000; box-shadow: none; }
 
 .st-controls { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 .st-controls-row { gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--liquid-sheen), rgba(255, 255, 255, .10); box-shadow: inset 0 1px 1px rgba(255, 255, 255, .4); }
@@ -474,3 +469,37 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 @keyframes tipInBelow { from { opacity: 0; transform: translate(-50%, -4px); } }
 /* room under the film / episode controls for those tooltips (the window would cut them) */
 .st-watch:not(:has(.st-video-theater)) { padding-bottom: 34px; }
+
+/* versions SD / HD / FHD / 4K */
+.st-q-mini { margin-left: 8px; font: var(--fw-medium) 10.5px/1 var(--font-sans); letter-spacing: .02em; color: var(--text-tertiary); white-space: nowrap; }
+.st-quality { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 10px 0 2px; }
+.st-quality-label { font: var(--fw-medium) 12px/1 var(--font-sans); color: var(--text-tertiary); margin-right: 4px; }
+.st-quality-chip { height: 28px; min-width: 46px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--white-a16); background: var(--white-a06); color: var(--text-secondary); font: var(--fw-semibold) 12px/1 var(--font-sans); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); }
+.st-quality-chip:hover { background: var(--white-a12); color: var(--text-primary); }
+.st-quality-chip.on { background: #fff; border-color: #fff; color: var(--ink-950); }
+
+/* fiches enrichies */
+.st-rich { position: relative; }
+.st-rich-backdrop { position: absolute; left: -28px; right: -28px; top: -70px; height: 300px; background-size: cover; background-position: center 30%; opacity: .32; pointer-events: none;
+  -webkit-mask: linear-gradient(180deg, #000 0%, rgba(0,0,0,.6) 45%, transparent 100%); mask: linear-gradient(180deg, #000 0%, rgba(0,0,0,.6) 45%, transparent 100%); }
+.st-rich > .st-detail { position: relative; }
+.st-tagline { margin: 0; font: italic var(--fw-medium) 14px/1.35 var(--font-sans); color: var(--text-secondary); }
+.st-genres { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-genres span { height: 24px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 99px; border: 1px solid var(--white-a16); font: var(--fw-medium) 11.5px/1 var(--font-sans); color: var(--text-secondary); }
+.st-row-title { font: var(--fw-semibold) 15px/1.2 var(--font-sans); margin: 0 0 10px; }
+.st-cast { position: relative; margin-top: 18px; }
+.st-cast-list { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; will-change: scroll-position; }
+.st-cast-item { flex: 0 0 84px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
+.st-face { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--ink-800); box-shadow: 0 0 0 1px var(--white-a12); }
+.st-face-none { display: grid; place-items: center; font: var(--fw-semibold) 18px/1 var(--font-sans); color: var(--text-secondary); background: linear-gradient(160deg, #3a3b42, #22232a); }
+.st-cast-name { font: var(--fw-medium) 12px/1.25 var(--font-sans); color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.st-cast-role { font: var(--fw-regular) 11px/1.25 var(--font-sans); color: var(--text-tertiary); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.st-similar-list { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; will-change: scroll-position; }
+.st-similar-item { flex: 0 0 128px; }
+.st-badge-q { margin-left: 6px; font-weight: var(--fw-semibold); }
+.st-badge-q:first-child { margin-left: 0; }
+
+/* télécommande */
+.st-remote { display: flex; gap: 20px; align-items: flex-start; padding: 16px; margin: 4px 0 12px; border-radius: var(--radius-lg); background: var(--white-a06); }
+.st-qr { flex: none; border-radius: 12px; }
+.st-remote-url { display: block; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, .35); font: 12.5px/1.4 var(--font-mono, ui-monospace, monospace); word-break: break-all; user-select: all; }

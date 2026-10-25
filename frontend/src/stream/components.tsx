@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Lock, Play, Tv } from "lucide-react";
 import { MouseEvent, ReactNode, UIEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, Modal } from "../components/ui";
-import { stream } from "./api";
+import { stream, Variant } from "./api";
 import { toastError, useStream } from "./store";
 
 // ------------------------------------------------------------------ formats
@@ -253,4 +253,20 @@ export async function toggleFav(type: string, id: string, on: boolean, after?: (
   } catch (e) {
     toastError(e);
   }
+}
+
+
+/** The same channel / film in SD, HD, FHD, 4K: one chip per version, the one playing (or to play) highlighted. */
+export function QualityPicker({ variants, current, onPick, label = "Qualité" }: { variants: Variant[]; current: string | null; onPick: (id: string) => void; label?: string }) {
+  return (
+    <div className="st-quality" role="radiogroup" aria-label={label}>
+      <span className="st-quality-label">{label}</span>
+      {variants.map((v) => (
+        <button key={v.id} type="button" role="radio" aria-checked={v.id === current} className={clsx("st-quality-chip", v.id === current && "on")}
+          onClick={() => onPick(v.id)} data-tip={v.name}>
+          {v.quality || "Standard"}
+        </button>
+      ))}
+    </div>
+  );
 }

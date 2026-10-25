@@ -1,7 +1,7 @@
 {
   "name": "se7en-iptv-player-ui",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.48.0",
     "motion": "^13.4.4",
+    "qrcode-generator": "^1.4.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zustand": "^5.0.15"

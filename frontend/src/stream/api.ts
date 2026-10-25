@@ -44,6 +44,10 @@ export interface StreamSettings {
   parental_pin: boolean;
   volume: number;
   user_agent: string;
+  group_quality: boolean;
+  quality_pref: "best" | "fhd" | "hd" | "sd";
+  instant_zap: boolean;
+  tmdb?: boolean;
 }
 
 export interface StreamState {
@@ -92,7 +96,22 @@ export interface Item {
   added?: number;
   plot?: string;
   progress?: number;
+  // the same channel / film in other qualities (SD / HD / FHD / 4K), best first; empty when there is only one
+  quality?: string;
+  variants?: Variant[];
+  // search: why it came up (« Avec Jean Reno », « Genre : comédie »…)
+  why?: string;
 }
+
+export interface Variant {
+  id: string;
+  quality: string;
+  name: string;
+}
+
+/** Is ``id`` this item or one of its other qualities? */
+export const isOf = (it: Item | null | undefined, id: string | null | undefined) =>
+  !!it && !!id && (it.id === id || !!it.variants?.some((v) => v.id === id));
 
 export interface Page<T> {
   total: number;
@@ -111,21 +130,50 @@ export interface Episode {
   watched: boolean;
 }
 
-export interface SeriesInfo extends Item {
-  cast?: string;
-  genre?: string;
-  backdrop?: string;
-  seasons: { season: string; episodes: Episode[] }[];
+export interface RemoteInfo {
+  enabled: boolean;
+  url: string;
+  port: number;
+  error: string;
 }
 
-export interface VodInfo extends Item {
+export interface CastMember {
+  name: string;
+  role: string;
+  photo: string;
+}
+
+export interface SimilarItem {
+  id: string;
+  name: string;
+  logo?: string;
+  year?: number | null;
+  rating?: number | null;
+  progress?: number | null;
+}
+
+/** What every film / series sheet gets on top of the provider's data (catalog.enrich). */
+interface Rich {
   cast?: string;
   director?: string;
   genre?: string;
-  duration?: string;
-  release?: string;
   backdrop?: string;
   trailer?: string;
+  tagline?: string;
+  genres?: string[];
+  cast_list?: CastMember[];
+  similar?: SimilarItem[];
+  tmdb?: boolean;
+  tmdb_error?: string;
+}
+
+export interface SeriesInfo extends Item, Rich {
+  seasons: { season: string; episodes: Episode[] }[];
+}
+
+export interface VodInfo extends Item, Rich {
+  duration?: string;
+  release?: string;
   poster?: string;
   resume: number;
 }
@@ -249,6 +297,9 @@ export const stream = {
   channelEpg: (id: string) => api.get<{ programmes: Programme[] }>(`${S}/channel/${enc(id)}/epg`),
   search: (q: string) => api.get<{ live: Item[]; movie: Item[]; series: Item[]; programmes: (Programme & { channel_id: string; channel_name: string; logo?: string })[] }>(`${S}/search?q=${enc(q)}`),
   vod: (id: string) => api.get<VodInfo>(`${S}/vod/${enc(id)}`),
+  tmdbKey: (key: string) => api.post<{ tmdb: boolean }>(`${S}/tmdb`, { key }),
+  remote: () => api.get<RemoteInfo>(`${S}/remote`),
+  setRemote: (enabled: boolean, reset = false) => api.post<RemoteInfo>(`${S}/remote`, { enabled, reset }),
   series: (id: string, refresh = false) => api.get<SeriesInfo>(`${S}/series/${enc(id)}?refresh=${refresh}`),
   favorite: (type: string, item: string, on: boolean) => api.post(`${S}/favorite`, { type, item, on }),
   hide: (type: string, item: string, on: boolean) => api.post(`${S}/hidden`, { type, item, on }),

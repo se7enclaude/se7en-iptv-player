@@ -6,6 +6,7 @@ import { Button, Empty, Modal, Select } from "../../components/ui";
 import { useApp } from "../../store/app";
 import { Category, Item, SeriesInfo, VodInfo, stream } from "../../stream/api";
 import { Bar, Poster, UnlockModal, clock, toggleFav } from "../../stream/components";
+import { DetailHead, SimilarRow } from "../../stream/Details";
 import { toastError, useStream } from "../../stream/store";
 import { CategoryList } from "./LivePage";
 
@@ -27,49 +28,49 @@ export async function playEpisode(series: string, ep: { id: string; episode: num
 }
 
 export function MovieModal({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const [cur, setCur] = useState(id);
   const [info, setInfo] = useState<VodInfo | null>(null);
+  const [pick, setPick] = useState<string | null>(null);
+  useEffect(() => setCur(id), [id]);
   useEffect(() => {
     setInfo(null);
-    if (id) stream.vod(id).then(setInfo).catch((e) => { toastError(e); onClose(); });
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setPick(null);
+    if (cur) stream.vod(cur).then(setInfo).catch((e) => { toastError(e); onClose(); });
+  }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
   const i = info;
+  const target = pick ?? i?.id ?? "";
   return (
-    <Modal open={!!id} onClose={onClose} width={760} eyebrow={<><Clapperboard size={12} /> Film</>} title={i?.name ?? "…"}>
+    <Modal open={!!id} onClose={onClose} width={900} eyebrow={<><Clapperboard size={12} /> Film</>} title={i?.name ?? "…"}>
       {i && (
-        <div className="st-detail">
-          <Poster src={i.poster || i.logo} name={i.name} />
-          <div className="col" style={{ gap: 10, minWidth: 0 }}>
-            <div className="st-meta">
-              {i.year && <span>{i.year}</span>}
-              {i.duration && <span>{i.duration}</span>}
-              {i.rating ? <span><Star size={12} /> {Number(i.rating).toFixed(1)}</span> : null}
-              {i.genre && <span>{i.genre}</span>}
-            </div>
-            {i.plot && <p className="st-plot">{i.plot}</p>}
-            {i.director && <p className="st-small"><b>Réalisation</b> {i.director}</p>}
-            {i.cast && <p className="st-small"><b>Avec</b> {i.cast}</p>}
-            <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 6 }}>
-              {i.resume > 0 ? (
+        <div className="col" style={{ gap: 18 }}>
+          <DetailHead name={i.name} poster={i.poster || i.logo} backdrop={i.backdrop} tagline={i.tagline}
+            facts={[i.year, i.duration, i.rating ? <><Star size={12} /> {Number(i.rating).toFixed(1)}</> : null]}
+            genres={i.genres} plot={i.plot} director={i.director} cast={i.cast_list} tmdbError={i.tmdb_error}
+            variants={i.variants} current={target} onVariant={setPick}
+            actions={<>
+              {i.resume > 0 && target === i.id ? (
                 <>
-                  <Button variant="primary" icon={<Play size={15} />} onClick={() => { onClose(); playMovie(i.id, true); }}>Reprendre à {clock(i.resume)}</Button>
-                  <Button icon={<RotateCcw size={15} />} onClick={() => { onClose(); playMovie(i.id, false); }}>Depuis le début</Button>
+                  <Button variant="primary" icon={<Play size={15} />} onClick={() => { onClose(); playMovie(target, true); }}>Reprendre à {clock(i.resume)}</Button>
+                  <Button icon={<RotateCcw size={15} />} onClick={() => { onClose(); playMovie(target, false); }}>Depuis le début</Button>
                 </>
               ) : (
-                <Button variant="primary" icon={<Play size={15} />} onClick={() => { onClose(); playMovie(i.id, false); }}>Regarder</Button>
+                <Button variant="primary" icon={<Play size={15} />} onClick={() => { onClose(); playMovie(target, false); }}>Regarder</Button>
               )}
               <Button icon={<Star size={15} />} active={(i as any).fav} onClick={() => toggleFav("movie", i.id, !(i as any).fav, () => setInfo({ ...i, fav: !(i as any).fav } as VodInfo))}>
                 {(i as any).fav ? "Dans les favoris" : "Favori"}
               </Button>
               {i.trailer && <Button onClick={() => api.post("/api/stream/trailer", { id: i.trailer }).catch(toastError)}>Bande-annonce</Button>}
-            </div>
-          </div>
+            </>} />
+          <SimilarRow items={i.similar} onOpen={setCur} />
         </div>
       )}
     </Modal>
   );
 }
 
-export function SeriesModal({ id, onClose }: { id: string | null; onClose: () => void }) {
+export function SeriesModal({ id: openId, onClose }: { id: string | null; onClose: () => void }) {
+  const [id, setId] = useState(openId);
+  useEffect(() => setId(openId), [openId]);
   const [info, setInfo] = useState<SeriesInfo | null>(null);
   const [season, setSeason] = useState("");
   const load = useCallback((refresh = false) => {
@@ -98,29 +99,21 @@ export function SeriesModal({ id, onClose }: { id: string | null; onClose: () =>
     <Modal open={!!id} onClose={onClose} width={860} eyebrow={<><Clapperboard size={12} /> Série</>} title={i?.name ?? "…"}>
       {i && (
         <div className="col" style={{ gap: 14 }}>
-          <div className="st-detail">
-            <Poster src={i.logo} name={i.name} />
-            <div className="col" style={{ gap: 10, minWidth: 0 }}>
-              <div className="st-meta">
-                {i.year && <span>{i.year}</span>}
-                {i.rating ? <span><Star size={12} /> {Number(i.rating).toFixed(1)}</span> : null}
-                {i.genre && <span>{i.genre}</span>}
-                <span>{i.seasons.length} saison{i.seasons.length > 1 ? "s" : ""}</span>
-              </div>
-              {i.plot && <p className="st-plot">{i.plot}</p>}
-              {i.cast && <p className="st-small"><b>Avec</b> {i.cast}</p>}
-              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                {nextUp && (
-                  <Button variant="primary" icon={<Play size={15} />} onClick={() => { onClose(); playEpisode(i.id, nextUp.e, nextUp.s); }}>
-                    {nextUp.e.progress > 0 ? "Reprendre" : "Regarder"} S{nextUp.s} E{nextUp.e.episode ?? "?"}
-                  </Button>
-                )}
-                <Button icon={<Star size={15} />} active={(i as any).fav} onClick={() => toggleFav("series", i.id, !(i as any).fav, () => setInfo({ ...i, fav: !(i as any).fav } as SeriesInfo))}>
-                  {(i as any).fav ? "Dans les favoris" : "Favori"}
+          <DetailHead name={i.name} poster={i.logo} backdrop={i.backdrop} tagline={i.tagline}
+            facts={[i.year, i.rating ? <><Star size={12} /> {Number(i.rating).toFixed(1)}</> : null, `${i.seasons.length} saison${i.seasons.length > 1 ? "s" : ""}`]}
+            genres={i.genres} plot={i.plot} director={i.director} directorLabel="Création" cast={i.cast_list} tmdbError={i.tmdb_error}
+            variants={i.variants} current={i.id} onVariant={setId}
+            actions={<>
+              {nextUp && (
+                <Button variant="primary" icon={<Play size={15} />} onClick={() => { onClose(); playEpisode(i.id, nextUp.e, nextUp.s); }}>
+                  {nextUp.e.progress > 0 ? "Reprendre" : "Regarder"} S{nextUp.s} E{nextUp.e.episode ?? "?"}
                 </Button>
-              </div>
-            </div>
-          </div>
+              )}
+              <Button icon={<Star size={15} />} active={(i as any).fav} onClick={() => toggleFav("series", i.id, !(i as any).fav, () => setInfo({ ...i, fav: !(i as any).fav } as SeriesInfo))}>
+                {(i as any).fav ? "Dans les favoris" : "Favori"}
+              </Button>
+              {i.trailer && <Button onClick={() => api.post("/api/stream/trailer", { id: i.trailer }).catch(toastError)}>Bande-annonce</Button>}
+            </>} />
           {i.seasons.length > 0 ? (
             <>
               <div className="st-seasons">
@@ -153,6 +146,7 @@ export function SeriesModal({ id, onClose }: { id: string | null; onClose: () =>
           ) : (
             <p className="muted">Aucun épisode pour le moment. <button className="st-link" onClick={() => load(true)}>Actualiser</button></p>
           )}
+          <SimilarRow items={i.similar} onOpen={setId} title="Séries similaires" />
         </div>
       )}
     </Modal>
@@ -223,7 +217,12 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
           }}>
             {items.map((it) => (
               <Poster key={it.id} src={it.logo} name={it.name} progress={it.progress} onClick={() => setOpen(it.id)}
-                badge={it.rating ? <><Star size={10} /> {Number(it.rating).toFixed(1)}</> : undefined}
+                badge={it.rating || it.variants?.length ? (
+                  <>
+                    {it.rating ? <><Star size={10} /> {Number(it.rating).toFixed(1)}</> : null}
+                    {it.variants?.length ? <span className="st-badge-q">{it.variants.map((v) => v.quality).filter(Boolean).join(" · ")}</span> : null}
+                  </>
+                ) : undefined}
                 sub={it.year ?? undefined} />
             ))}
           </div>

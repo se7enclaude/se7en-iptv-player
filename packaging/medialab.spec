@@ -29,6 +29,7 @@ datas += collect_data_files("webview")
 datas += collect_data_files("yt_dlp_ejs")
 datas += collect_data_files("certifi")
 datas += [(str(BACKEND / "medialab" / "stream" / "fonts"), "medialab/stream/fonts")]  # polices du bandeau du lecteur
+datas += [(str(BACKEND / "medialab" / "stream" / "remote.html"), "medialab/stream")]  # page de la télécommande (téléphone)
 binaries = collect_dynamic_libs("pillow_heif") + collect_dynamic_libs("curl_cffi")
 
 common = dict(pathex=[str(BACKEND)], hiddenimports=hidden, datas=datas, binaries=binaries,

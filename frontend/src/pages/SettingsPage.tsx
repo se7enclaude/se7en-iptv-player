@@ -21,13 +21,14 @@ import { bytes, relative } from "../lib/format";
 import { play } from "../lib/sounds";
 import { useApp } from "../store/app";
 import { Wordmark } from "../components/TopBar";
-import { AccountsSettings, BackupSettings, PlaybackSettings, ProfilesSettings, RecordingSettings } from "../stream/StreamSettings";
+import { AccountsSettings, BackupSettings, PlaybackSettings, ProfilesSettings, RecordingSettings, RemoteSettings } from "../stream/StreamSettings";
 
 // se7en IPTV Player ne garde que ses propres réglages (les sections de se7en Download restent dans le code, cachées)
 const SECTIONS = [
   { id: "accounts", icon: Settings2 },
   { id: "profiles", icon: Settings2 },
   { id: "playback", icon: Settings2 },
+  { id: "remote", icon: Settings2 },
   { id: "recording", icon: Settings2 },
   { id: "backup", icon: Settings2 },
   { id: "general", icon: Settings2 },
@@ -97,6 +98,7 @@ export function SettingsPage() {
           {sec("accounts", <AccountsSettings />)}
           {sec("profiles", <ProfilesSettings />)}
           {sec("playback", <PlaybackSettings />)}
+          {sec("remote", <RemoteSettings />)}
           {sec("recording", <RecordingSettings />)}
           {sec("backup", <BackupSettings />)}
           {sec("general", <General s={settings} upd={upd} />)}

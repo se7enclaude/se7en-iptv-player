@@ -67,7 +67,18 @@ if _u32:
     _u32.FindWindowW.restype = wintypes.HWND
     _u32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     _u32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    _u32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    _u32.SendMessageW.restype = ctypes.c_ssize_t
     _u32.SetWindowRgn.argtypes = [wintypes.HWND, wintypes.HANDLE, wintypes.BOOL]
+    _u32.SetParent.argtypes = [wintypes.HWND, wintypes.HWND]
+    _u32.SetParent.restype = wintypes.HWND
+    _u32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+    _u32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+    _u32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+    _u32.MonitorFromWindow.restype = wintypes.HANDLE
+    _u32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    _u32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    _u32.SetFocus.argtypes = [wintypes.HWND]
     _k32.GetModuleHandleW.restype = wintypes.HMODULE
     _g32.GetStockObject.restype = wintypes.HGDIOBJ
     _g32.CreateRoundRectRgn.restype = wintypes.HANDLE
@@ -80,6 +91,13 @@ if _u32:
 
 WM_CLOSE = 0x0010
 MA_NOACTIVATE = 3
+WM_FULLSCREEN = 0x8000 + 1  # WM_APP + 1 : wParam 1 = entrer, 0 = sortir (traité sur le fil de la fenêtre)
+CHILD_STYLE = 0x40000000 | 0x04000000 | 0x02000000  # CHILD | CLIPSIBLINGS | CLIPCHILDREN
+POPUP_STYLE = 0x80000000 | 0x10000000 | 0x02000000  # POPUP | VISIBLE | CLIPCHILDREN
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
 
 
 class Host:
@@ -90,14 +108,23 @@ class Host:
         self.hwnd = None
         self.parent = None
         self.child = False
+        self.fullscreen = False
+        self.last = (0, 0, 1, 1, False, 0)  # dernière place dans la page (rendue en sortant du plein écran)
+        self.on_close: Callable[[], None] = lambda: None
         self._ready = threading.Event()
         self._proc = WNDPROC(self._wndproc)
         threading.Thread(target=self._loop, name="player-host", daemon=True).start()
         self._ready.wait(5)
 
     def _wndproc(self, h, m, w, l):
-        if m == 0x0021:  # WM_MOUSEACTIVATE : la vidéo ne vole pas le focus clavier à l'interface
-            return MA_NOACTIVATE if self.child else _u32.DefWindowProcW(h, m, w, l)
+        if m == 0x0021:  # WM_MOUSEACTIVATE : dans la page, la vidéo ne vole pas le focus clavier à l'interface
+            return MA_NOACTIVATE if self.child and not self.fullscreen else _u32.DefWindowProcW(h, m, w, l)
+        if m == WM_FULLSCREEN:
+            self._enter_fullscreen() if w else self._exit_fullscreen()
+            return 0
+        if m == WM_CLOSE and self.fullscreen:  # Alt+F4 en plein écran : on revient dans l'appli
+            self.on_close()
+            return 0
         if m == WM_CLOSE and not self.child:
             _u32.ShowWindow(h, 0)
             bus.publish("player", {"event": "closed"})
@@ -108,7 +135,11 @@ class Host:
         wc = _WNDCLASS()
         wc.lpfnWndProc = self._proc
         wc.hInstance = _k32.GetModuleHandleW(None)
-        wc.lpszClassName = "se7enIPTVPlayerVideo"
+        # une classe par fenêtre : la classe porte la procédure de fenêtre, et chaque Host (lecteur affiché, lecteur de
+        # réserve du zapping instantané) doit recevoir ses propres messages
+        Host._count = getattr(Host, "_count", 0) + 1
+        self.cls = f"se7enIPTVPlayerVideo{Host._count}"
+        wc.lpszClassName = self.cls
         wc.hbrBackground = _g32.GetStockObject(4)  # noir
         wc.hCursor = _u32.LoadCursorW(None, 32512)
         _u32.RegisterClassW(ctypes.byref(wc))
@@ -116,11 +147,11 @@ class Host:
         if self.parent:
             self.child = True
             style = 0x40000000 | 0x04000000 | 0x02000000  # CHILD | CLIPSIBLINGS | CLIPCHILDREN (caché au départ)
-            self.hwnd = _u32.CreateWindowExW(0, "se7enIPTVPlayerVideo", "video", style, 0, 0, 16, 9, self.parent, None,
+            self.hwnd = _u32.CreateWindowExW(0, self.cls, "video", style, 0, 0, 16, 9, self.parent, None,
                                              wc.hInstance, None)
         else:  # pas de fenêtre d'appli (navigateur, tests) : une fenêtre à part
             style = 0x00CF0000  # WS_OVERLAPPEDWINDOW
-            self.hwnd = _u32.CreateWindowExW(0, "se7enIPTVPlayerVideo", "se7en IPTV Player", style, 120, 120, 960, 540, None, None,
+            self.hwnd = _u32.CreateWindowExW(0, self.cls, "se7en IPTV Player", style, 120, 120, 960, 540, None, None,
                                              wc.hInstance, None)
         self._ready.set()
         msg = wintypes.MSG()
@@ -128,18 +159,58 @@ class Host:
             _u32.TranslateMessage(ctypes.byref(msg))
             _u32.DispatchMessageW(ctypes.byref(msg))
 
+    # ---------------------------------------------------------------- plein écran natif
+    def set_fullscreen(self, on: bool) -> None:
+        """La vidéo seule, dans sa propre fenêtre sur tout l'écran (celui de l'appli) : elle prend toute la place, garde
+        le clavier (Échap, F, flèches) et la souris (double-clic, boutons du bandeau)."""
+        if self.hwnd and self.child:  # SendMessage : fait sur le fil de la fenêtre, et fini quand on continue
+            _u32.SendMessageW(self.hwnd, WM_FULLSCREEN, 1 if on else 0, 0)
+
+    def _enter_fullscreen(self) -> None:
+        if self.fullscreen:
+            return
+        info = _MONITORINFO()
+        info.cbSize = ctypes.sizeof(_MONITORINFO)
+        _u32.GetMonitorInfoW(_u32.MonitorFromWindow(self.parent or self.hwnd, 2), ctypes.byref(info))  # 2 : le plus proche
+        r = info.rcMonitor
+        self.fullscreen = True
+        _u32.SetWindowRgn(self.hwnd, None, True)
+        _u32.SetParent(self.hwnd, None)
+        _u32.SetWindowLongPtrW(self.hwnd, -16, POPUP_STYLE)  # GWL_STYLE
+        _u32.SetWindowLongPtrW(self.hwnd, -8, self.parent or 0)  # GWLP_HWNDPARENT : appartient à l'appli (pas d'icône à part)
+        _u32.SetWindowPos(self.hwnd, wintypes.HWND(0), r.left, r.top, r.right - r.left, r.bottom - r.top, 0x0040 | 0x0020)
+        # au premier plan même si la demande vient du téléphone, appli en arrière-plan (sans rester « toujours devant »)
+        _u32.SetWindowPos(self.hwnd, wintypes.HWND(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)  # TOPMOST, NOSIZE|NOMOVE|NOACTIVATE
+        _u32.SetWindowPos(self.hwnd, wintypes.HWND(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)  # NOTOPMOST
+        _u32.SetForegroundWindow(self.hwnd)
+        _u32.SetFocus(self.hwnd)
+        log.info("Video full screen %dx%d", r.right - r.left, r.bottom - r.top)
+
+    def _exit_fullscreen(self) -> None:
+        if not self.fullscreen:
+            return
+        self.fullscreen = False
+        _u32.SetWindowLongPtrW(self.hwnd, -8, 0)
+        _u32.SetWindowLongPtrW(self.hwnd, -16, CHILD_STYLE)
+        _u32.SetParent(self.hwnd, self.parent)
+        _u32.SetWindowPos(self.hwnd, wintypes.HWND(0), 0, 0, 1, 1, 0x0020 | 0x0010 | 0x0080)  # FRAMECHANGED, caché
+        self.place(*self.last)
+        if self.parent:
+            _u32.SetForegroundWindow(self.parent)
+
     def place(self, x: int, y: int, w: int, h: int, visible: bool, radius: int = 0) -> None:
         if not self.hwnd:
+            return
+        self.last = (x, y, w, h, visible, radius)
+        if self.fullscreen:  # en plein écran la page ne décide plus de la place de la vidéo
             return
         if not self.child:
             _u32.ShowWindow(self.hwnd, 5 if visible else 0)
             return
         flags = 0x0010 | (0x0040 if visible and w > 1 and h > 1 else 0x0080)  # NOACTIVATE | SHOW / HIDE
         _u32.SetWindowPos(self.hwnd, wintypes.HWND(0), x, y, max(1, w), max(1, h), flags)
-        if radius and visible:
-            _u32.SetWindowRgn(self.hwnd, _g32.CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2), True)
-        elif visible:
-            _u32.SetWindowRgn(self.hwnd, None, True)
+        # pas de coins arrondis découpés (SetWindowRgn) : une région sur une fenêtre vidéo oblige Windows à recomposer
+        # chaque image, et la lecture saccade
 
 
 # ------------------------------------------------------------------ dessin des contrôles (ASS)
@@ -227,6 +298,17 @@ def osd(state: dict, W: int = 1920, H: int = 1080) -> tuple[str, list[dict]]:
         vol = "Muet" if state.get("muted") else f"{int(state.get('volume') or 0)} %"
         ev.append(rf"{{\an6\pos({bx + bw - 34},{by + 56})\fnManrope\fs26\1c&HDDDDDD&\bord0\shad0}}{vol}")
         hits.append({"id": "mute", "x": bx + bw - 130, "y": by + 26, "w": 110, "h": 60})
+        if state.get("fullscreen"):  # plein écran : toujours une sortie visible, et le zapping à la souris
+            ex, ey, ew, eh = bx + bw - 430, by - 84, 430, 64
+            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_rr(ex, ey, ew, eh, 32)}")
+            ev.append(rf"{{\an5\pos({ex + ew // 2},{ey + eh // 2})\fnManrope\b1\fs28\1c&H0E0D0B&\bord0\shad0}}Quitter le plein écran (Échap)")
+            hits.append({"id": "exit_fs", "x": ex, "y": ey, "w": ew, "h": eh})
+            if live:
+                for k, (hid, label) in enumerate((("zap_up", "Chaîne −"), ("zap_down", "Chaîne +"))):
+                    zx = bx + k * 220
+                    ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(zx, by - 84, 200, 64, 32)}")
+                    ev.append(rf"{{\an5\pos({zx + 100},{by - 52})\fnManrope\b1\fs28\1c&HFFFFFF&\bord0\shad0}}{label}")
+                    hits.append({"id": hid, "x": zx, "y": by - 84, "w": 200, "h": 64})
     # ---- messages (volume, erreur, reconnexion)
     msg = state.get("message")
     if msg:
@@ -254,17 +336,31 @@ class Player:
         self.on_action: Callable[[str, dict], None] = lambda a, d: None  # zapping, plein écran… gérés par l'API
         self._osd_thread: threading.Thread | None = None
         self._progress_cb: Callable[[dict, float, float], None] | None = None
+        # zapping instantané : un 2e lecteur, caché et muet, ouvre d'avance la chaîne suivante ; zapper dessus échange
+        # les deux lecteurs (l'image est déjà là). Seulement si l'abonnement permet une connexion de plus (api.py).
+        self._spare: dict | None = None
+        self.fullscreen = False
 
     # ---------------------------------------------------------------- création
     def _ensure(self):
         if self.mpv is not None:
             return self.mpv
-        mpv = _mpv()
         self.host = Host(self.app_title)
+        self.host.on_close = lambda: self.on_action("exit_fullscreen", {})
+        self.mpv = self._create(self.host)
+        self._osd_thread = threading.Thread(target=self._osd_loop, name="player-osd", daemon=True)
+        self._osd_thread.start()
+        self._apply_rect()
+        log.info("Player ready (libmpv in %s, %s)", mpv_dir(), "child window" if self.host.child else "own window")
+        return self.mpv
+
+    def _create(self, host: "Host", muted: bool = False):
+        """Un lecteur mpv qui dessine dans ``host``. Ses évènements ne comptent que tant qu'il est le lecteur affiché."""
+        mpv = _mpv()
         s = self.settings()
         fonts = Path(__file__).resolve().parent / "fonts"
         # load_scripts / ytdl : pas de scripts Lua intégrés (inutiles ici, et ytdl_hook lancerait yt-dlp sur les flux)
-        opts = dict(wid=str(int(self.host.hwnd)), hwdec=s.get("hwdec", "auto-safe"), vo="gpu-next", keep_open="yes",
+        opts = dict(wid=str(int(host.hwnd)), hwdec=s.get("hwdec", "auto-safe"), vo="gpu-next", keep_open="yes",
                     load_scripts="no", ytdl="no", config="no", terminal="no", input_media_keys="no",
                     idle="yes", force_window="yes", osc="no", osd_level="0", input_default_bindings="no",
                     input_vo_keyboard="yes", cursor_autohide="1500", cache="yes",
@@ -273,28 +369,83 @@ class Player:
                     stream_lavf_o="reconnect=1,reconnect_streamed=1,reconnect_delay_max=5,reconnect_on_network_error=1",
                     sub_auto="fuzzy", screenshot_directory=str(Path.home() / "Pictures" / "se7en IPTV Player"),
                     screenshot_format="png", volume=str(int(s.get("volume", 100))), volume_max="150",
+                    mute="yes" if muted else "no",
+                    # fluidité : chaînes entrelacées (sport en 1080i) désentrelacées, images calées sur l'écran
+                    deinterlace="auto", video_sync="display-resample", interpolation="yes", tscale="oversample",
                     alang=s.get("audio_lang", "fr,fre,fra,en,eng"), slang=s.get("sub_lang", "fr,fre,fra"))
         if fonts.is_dir():
             opts.update(osd_fonts_dir=str(fonts), sub_fonts_dir=str(fonts))
         if os.environ.get("SE7EN_MPV_LOG"):  # diagnostic : journal complet de mpv dans ce fichier
             opts["log_file"] = os.environ["SE7EN_MPV_LOG"]
-        self.mpv = mpv.MPV(log_handler=self._mpv_log, loglevel="warn", **opts)
-        self._bind_inputs()
-        self.mpv.observe_property("eof-reached", lambda _n, v: v and self._ended())
-        self.mpv.event_callback("end-file")(self._end_file)
-        self._osd_thread = threading.Thread(target=self._osd_loop, name="player-osd", daemon=True)
-        self._osd_thread.start()
-        self._apply_rect()
-        log.info("Player ready (libmpv in %s, %s)", mpv_dir(), "child window" if self.host.child else "own window")
-        return self.mpv
+        m = mpv.MPV(log_handler=self._mpv_log, loglevel="warn", **opts)
+        self._bind_inputs(m)
+        m.observe_property("eof-reached", lambda _n, v: v and m is self.mpv and self._ended())
+        m.event_callback("end-file")(lambda ev: m is self.mpv and self._end_file(ev))
+        return m
+
+    # ---------------------------------------------------------------- zapping instantané
+    def preload(self, url: str, item: dict, user_agent: str = "") -> None:
+        """Ouvre ``item`` d'avance, caché et muet, pour que zapper dessus soit immédiat."""
+        with self.lock:
+            if self.mpv is None or (self._spare and self._spare.get("id") == item.get("id")):
+                return
+            if self._spare is None:
+                host = Host(self.app_title)
+                host.on_close = lambda: self.on_action("exit_fullscreen", {})
+                if not host.child:  # sans fenêtre d'appli (tests, navigateur) : pas de 2e lecteur
+                    return
+                self._spare = {"host": host, "mpv": self._create(host, muted=True)}
+            sp = self._spare
+            sp.update(id=item.get("id"), url=url, since=time.monotonic())
+            m = sp["mpv"]
+            m.user_agent = user_agent or ""
+            m.mute = True
+            m.loadfile(url, "replace")
+            m.pause = False
+            log.info("Preload %s %s", item.get("kind"), redact(url))
+
+    def preloaded(self) -> str | None:
+        return (self._spare or {}).get("id")
+
+    def drop_preload(self) -> bool:
+        """Ferme la chaîne ouverte d'avance (sa connexion est libérée). True s'il y en avait une."""
+        with self.lock:
+            sp = self._spare
+            if not sp or not sp.get("id"):
+                return False
+            sp["id"] = sp["url"] = None
+            try:
+                sp["mpv"].command("stop")
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+
+    def _swap(self, url: str, item: dict) -> None:
+        """La chaîne demandée est déjà ouverte en coulisse : on l'affiche, l'ancienne devient le lecteur de réserve."""
+        sp = self._spare
+        old_m, old_h = self.mpv, self.host
+        vol, mute = old_m.volume, old_m.mute
+        self.mpv, self.host = sp["mpv"], sp["host"]
+        self.item, self.url, self.retries, self.stopped_by_user = dict(item), url, 0, False
+        self.mpv.volume, self.mpv.mute = vol, mute
+        if self.fullscreen:  # en plein écran, la nouvelle vidéo prend l'écran et l'ancienne retourne dans la page
+            self.host.set_fullscreen(True)
+            old_h.set_fullscreen(False)
+        self._apply_rect()  # la nouvelle vidéo passe devant…
+        old_h.place(0, 0, 1, 1, False)  # … l'ancienne disparaît
+        try:
+            old_m.command("stop")
+            old_m.mute = True
+        except Exception:  # noqa: BLE001
+            pass
+        self._spare = {"host": old_h, "mpv": old_m, "id": None, "url": None}
+        log.info("Zap from preload in %.0f ms after preloading", (time.monotonic() - sp.get("since", time.monotonic())) * 1000)
 
     def _mpv_log(self, level, prefix, text) -> None:
         if level in ("error", "fatal"):
             log.warning("mpv %s: %s", prefix, redact(text.strip()))
 
-    def _bind_inputs(self) -> None:
-        m = self.mpv
-
+    def _bind_inputs(self, m) -> None:
         def on(key: str, fn: Callable[[], None]) -> None:
             m.register_key_binding(key, lambda state, name, char: state[0] in "dp" and fn())
 
@@ -322,6 +473,12 @@ class Player:
     def play(self, url: str, item: dict, start: float = 0.0, user_agent: str = "") -> None:
         with self.lock:
             m = self._ensure()
+            sp = self._spare
+            if sp and sp.get("id") is not None and sp.get("id") == item.get("id") and sp.get("url") == url:
+                self._swap(url, item)
+                self.show_osd(5)
+                bus.publish("player", {"event": "play", "item": self.item})
+                return
             self.item = dict(item)
             self.url = url
             self.retries = 0
@@ -336,7 +493,16 @@ class Player:
             self.show_osd(5)
             bus.publish("player", {"event": "play", "item": self.item})
 
+    def set_fullscreen(self, on: bool) -> None:
+        self.fullscreen = on
+        if self.host is not None:
+            self.host.set_fullscreen(on)
+        self.show_osd(4 if on else 2)
+
     def stop(self) -> None:
+        if self.fullscreen:  # plus rien à regarder : retour dans l'appli
+            self.on_action("exit_fullscreen", {})
+        self.drop_preload()
         with self.lock:
             self.stopped_by_user = True
             if self.mpv is not None:
@@ -435,11 +601,16 @@ class Player:
                     self.toggle_mute()
                 elif h["id"] == "seek" and self.mpv.duration:
                     self.seek((x - h["x"]) / h["w"] * self.mpv.duration, absolute=True)
+                elif h["id"] == "exit_fs":
+                    self.on_action("exit_fullscreen", {})
+                elif h["id"] in ("zap_up", "zap_down"):
+                    self.on_action("zap", {"delta": -1 if h["id"] == "zap_up" else 1})
                 return
         self.on_action("click", {})
 
     def _osd_loop(self) -> None:
         last = None
+        last_m = None
         tick = 0
         while True:
             time.sleep(0.25)
@@ -447,13 +618,15 @@ class Player:
             m = self.mpv
             if m is None:
                 continue
+            if m is not last_m:  # zapping instantané : l'autre lecteur est passé devant
+                last, last_m = None, m
             try:
                 st = self.snapshot(light=True)
                 visible = bool(self.item) and (time.monotonic() < self.osd_until or st.get("paused") or st.get("buffering"))
                 if self.message and time.monotonic() > self.message[1]:
                     self.message = None
                 if visible:
-                    data, self.hits = osd({**(self.item or {}), **st, "controls": True,
+                    data, self.hits = osd({**(self.item or {}), **st, "controls": True, "fullscreen": self.fullscreen,
                                            "message": self.message[0] if self.message else None})
                 else:
                     data, self.hits = "", []
@@ -545,5 +718,7 @@ class Player:
             self._save_progress()
             if self.mpv is not None:
                 self.mpv.terminate()
+            if self._spare is not None:
+                self._spare["mpv"].terminate()
         except Exception:  # noqa: BLE001
             pass

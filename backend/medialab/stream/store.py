@@ -21,7 +21,7 @@ from ..config import paths
 from ..errors import MediaLabError
 from .. import security
 
-SCHEMA = 3
+SCHEMA = 4
 TYPES = ("live", "movie", "series")
 ADULT_WORDS = ("adult", "adulte", "xxx", "18+", "+18", "porn", "porno", "sex", "erotic", "érotique", "hot ", "for adults")
 
@@ -64,6 +64,14 @@ CREATE TABLE IF NOT EXISTS tracks (profile TEXT, kind TEXT, lang TEXT, PRIMARY K
 CREATE TABLE IF NOT EXISTS recordings (
   id TEXT PRIMARY KEY, account TEXT, channel TEXT, channel_name TEXT, title TEXT, start REAL, stop REAL, source TEXT,
   status TEXT, file TEXT, size INTEGER, error TEXT, created REAL);
+CREATE TABLE IF NOT EXISTS details (account TEXT, type TEXT, id TEXT, data TEXT, fetched REAL, PRIMARY KEY (account, type, id));
+CREATE TABLE IF NOT EXISTS people (
+  account TEXT, type TEXT, id TEXT, genre TEXT, actors TEXT, director TEXT, PRIMARY KEY (account, type, id));
+CREATE TABLE IF NOT EXISTS tmdb (key TEXT PRIMARY KEY, data TEXT, fetched REAL);
+CREATE TABLE IF NOT EXISTS variants (
+  account TEXT, type TEXT, id TEXT, grp TEXT, quality TEXT, rank INTEGER, rep_all INTEGER, rep_cat INTEGER,
+  pos_all INTEGER, pos_cat INTEGER, PRIMARY KEY (account, type, id));
+CREATE INDEX IF NOT EXISTS variants_grp ON variants (account, type, grp);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, profile TEXT, account TEXT, channel TEXT, channel_name TEXT, title TEXT, start REAL, fired INTEGER DEFAULT 0);
 """

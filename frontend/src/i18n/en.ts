@@ -12,6 +12,7 @@ export const en: Record<string, string> = {
   "settings.profiles": "Profiles and parental control",
   "settings.profiles.desc": "Separate favourites and history, adult content locked.",
   "settings.playback": "Playback",
+  "settings.remote": "Phone remote",
   "settings.playback.desc": "Stream format, decoding, buffer and languages.",
   "settings.recording": "Recordings and guide",
   "settings.recording.desc": "Folder, margins and catalogue updates.",
