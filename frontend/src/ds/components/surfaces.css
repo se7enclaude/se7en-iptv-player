@@ -1,0 +1,17 @@
+/* Surfaces: GlassPanel, Dialog */
+.ip-panel{position:relative;border-radius:var(--radius-2xl);background:var(--surface-panel);border:1px solid var(--border-default);box-shadow:var(--shadow-panel);backdrop-filter:var(--glass-filter);-webkit-backdrop-filter:var(--glass-filter)}
+.ip-panel--raised{background:var(--white-a06);border-color:var(--border-subtle);box-shadow:var(--shadow-glass-edge);backdrop-filter:none;-webkit-backdrop-filter:none}
+.ip-panel--solid{background:var(--surface-panel-solid);backdrop-filter:none;-webkit-backdrop-filter:none}
+.ip-panel--sunken{background:var(--surface-sunken);border-color:var(--border-subtle);box-shadow:inset 0 1px 2px rgba(0,0,0,.3);backdrop-filter:none;-webkit-backdrop-filter:none}
+.ip-panel--r-lg{border-radius:var(--radius-lg)}.ip-panel--r-xl{border-radius:var(--radius-xl)}.ip-panel--r-3xl{border-radius:var(--radius-3xl)}
+
+.ip-dialog__scrim{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:var(--space-8);background:var(--surface-scrim);backdrop-filter:blur(var(--blur-sm));-webkit-backdrop-filter:blur(var(--blur-sm));animation:ip-fade-in var(--dur-base) var(--ease-out)}
+.ip-dialog__scrim--contained{position:absolute}
+.ip-dialog{position:relative;display:flex;flex-direction:column;gap:var(--space-6);width:100%;max-width:440px;padding:var(--space-8);border-radius:var(--radius-2xl);background:rgba(28,29,34,.86);border:1px solid var(--border-default);box-shadow:var(--shadow-panel);backdrop-filter:var(--glass-filter);-webkit-backdrop-filter:var(--glass-filter)}
+.ip-dialog--center{align-items:center;text-align:center}
+.ip-dialog__head{display:flex;flex-direction:column;gap:var(--space-2)}
+.ip-dialog__title{margin:0;font:var(--type-h3);color:var(--text-primary)}
+.ip-dialog__desc{margin:0;font:var(--type-body);color:var(--text-secondary);text-wrap:pretty}
+.ip-dialog__actions{display:flex;gap:var(--space-3);justify-content:flex-end}
+.ip-dialog--center .ip-dialog__actions{justify-content:center}
+.ip-dialog__close{position:absolute;top:16px;right:16px}

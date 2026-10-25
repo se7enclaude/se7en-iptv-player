@@ -1,0 +1,31 @@
+/* Glass, shadows, scrims, motion. */
+:root{
+--blur-sm:12px; /* @kind other */
+--blur-md:24px; /* @kind other */
+--blur-lg:48px; /* @kind other */
+--glass-filter:blur(var(--blur-lg)) saturate(160%); /* @kind other */
+--glass-filter-control:blur(var(--blur-md)) saturate(140%); /* @kind other */
+--shadow-sm:0 2px 8px rgba(0,0,0,.28);
+--shadow-md:0 12px 32px rgba(0,0,0,.38);
+--shadow-lg:0 32px 80px rgba(0,0,0,.55);
+--shadow-glass-edge:inset 0 1px 0 rgba(255,255,255,.10),inset 0 0 0 1px rgba(255,255,255,.06);
+--shadow-panel:var(--shadow-glass-edge),var(--shadow-lg);
+--shadow-focus:0 0 0 2px var(--ink-950),0 0 0 4px var(--focus-ring);
+--shadow-accent-glow:0 8px 24px var(--accent-glow);
+--scrim-bottom:linear-gradient(180deg,rgba(5,6,8,0) 35%,rgba(5,6,8,.88) 100%); /* @kind other */
+
+--scrim-left:linear-gradient(90deg,rgba(5,6,8,.92) 0%,rgba(5,6,8,.55) 42%,rgba(5,6,8,0) 72%); /* @kind other */
+
+--scrim-top:linear-gradient(0deg,rgba(5,6,8,0) 0%,rgba(5,6,8,.7) 100%); /* @kind other */
+
+--ease-standard:cubic-bezier(.2,0,0,1); /* @kind other */
+--ease-out:cubic-bezier(.22,1,.36,1); /* @kind other */
+--ease-in:cubic-bezier(.4,0,1,1); /* @kind other */
+--dur-instant:80ms; /* @kind other */
+--dur-fast:150ms; /* @kind other */
+--dur-base:240ms; /* @kind other */
+--dur-slow:400ms; /* @kind other */
+--dur-cinematic:700ms; /* @kind other */
+--focus-scale:1.05; /* @kind other */
+--press-scale:.97; /* @kind other */
+}

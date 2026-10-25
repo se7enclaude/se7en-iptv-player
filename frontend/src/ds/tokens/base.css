@@ -1,0 +1,7 @@
+html,body{background:var(--bg-app);color:var(--text-primary);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+::selection{background:var(--accent);color:var(--accent-fg)}
+a{color:var(--text-primary);text-decoration:none}a:hover{color:var(--accent-hover)}
+.ip-noscrollbar{scrollbar-width:none}.ip-noscrollbar::-webkit-scrollbar{display:none}
+@keyframes ip-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes ip-fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes ip-countdown{from{transform:scaleX(0)}to{transform:scaleX(1)}}

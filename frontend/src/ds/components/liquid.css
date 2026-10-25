@@ -1,0 +1,46 @@
+/* Liquid glass material — clearer than frosted, specular rim, inner glow, optional refraction.
+   Default material. Opt out per scope with [data-glass="frosted"]. Refraction needs <LiquidFilter /> mounted once. */
+:root{
+--liquid-tint:rgba(255,255,255,.20);
+--liquid-tint-strong:rgba(255,255,255,.30);
+--liquid-tint-panel:rgba(255,255,255,.17);
+--liquid-filter:blur(14px) saturate(180%) brightness(1.18); /* @kind other */
+--liquid-filter-panel:blur(30px) saturate(180%) brightness(1.12); /* @kind other */
+--liquid-sheen:linear-gradient(165deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,.10) 30%,rgba(255,255,255,.02) 55%,rgba(255,255,255,.10) 100%); /* @kind other */
+--liquid-rim:linear-gradient(140deg,rgba(255,255,255,.95) 0%,rgba(255,255,255,.40) 22%,rgba(255,255,255,.14) 50%,rgba(255,255,255,.28) 78%,rgba(255,255,255,.80) 100%); /* @kind other */
+--liquid-shadow:inset 0 1px 1px rgba(255,255,255,.65),inset 0 -1px 1px rgba(255,255,255,.18),inset 0 0 16px rgba(255,255,255,.14),0 8px 24px rgba(0,0,0,.22);
+--liquid-shadow-panel:inset 0 1px 1px rgba(255,255,255,.55),inset 0 0 48px rgba(255,255,255,.08),0 32px 80px rgba(0,0,0,.40);
+--liquid-shadow-solid:inset 0 1px 1px rgba(255,255,255,.55),inset 0 -2px 6px rgba(0,0,0,.12);
+}
+
+/* Material: translucent controls */
+:root:not([data-glass="frosted"]) :is(.ip-btn--glass,.ip-iconbtn--glass,.ip-chip:not(.is-selected),.ip-select__btn,.ip-input--search,.ip-badge--glass,.ip-tab.is-selected,.ip-tabs--contained,.ip-pinpad__key:not(.ip-pinpad__key--ghost)){background:var(--liquid-sheen),var(--liquid-tint);border-color:transparent;box-shadow:var(--liquid-shadow);backdrop-filter:var(--liquid-filter);-webkit-backdrop-filter:var(--liquid-filter)}
+:root:not([data-glass="frosted"]) :is(.ip-btn--glass,.ip-iconbtn--glass,.ip-chip:not(.is-selected),.ip-select__btn,.ip-pinpad__key:not(.ip-pinpad__key--ghost)):hover{background:var(--liquid-sheen),var(--liquid-tint-strong)}
+:root:not([data-glass="frosted"]) :is(.ip-iconbtn--scrim,.ip-skip:not(.ip-skip--next)){background:var(--liquid-sheen),rgba(255,255,255,.22);border-color:transparent;box-shadow:var(--liquid-shadow);backdrop-filter:var(--liquid-filter);-webkit-backdrop-filter:var(--liquid-filter)}
+:root:not([data-glass="frosted"]) :is(.ip-iconbtn--scrim,.ip-skip:not(.ip-skip--next)):hover{background:var(--liquid-sheen),rgba(255,255,255,.32)}
+:root:not([data-glass="frosted"]) .ip-tabs--contained{background:var(--liquid-sheen),rgba(255,255,255,.12);box-shadow:inset 0 1px 1px rgba(255,255,255,.40),inset 0 0 12px rgba(255,255,255,.08)}
+:root:not([data-glass="frosted"]) .ip-tab.is-selected{background:var(--liquid-sheen),rgba(255,255,255,.34)}
+
+/* Material: floating surfaces */
+:root:not([data-glass="frosted"]) :is(.ip-panel:not(.ip-panel--solid):not(.ip-panel--sunken):not(.ip-panel--raised),.ip-dock,.ip-menu,.ip-dialog){background:var(--liquid-sheen),var(--liquid-tint-panel);border-color:transparent;box-shadow:var(--liquid-shadow-panel);backdrop-filter:var(--liquid-filter-panel);-webkit-backdrop-filter:var(--liquid-filter-panel)}
+:root:not([data-glass="frosted"]) .ip-menu,:root:not([data-glass="frosted"]) .ip-dialog{background:var(--liquid-sheen),rgba(255,255,255,.18)}
+:root:not([data-glass="frosted"]) .ip-panel--raised{background:var(--liquid-sheen),rgba(255,255,255,.08);border-color:transparent;box-shadow:inset 0 1px 1px rgba(255,255,255,.40),inset 0 0 20px rgba(255,255,255,.06)}
+
+/* Specular rim (gradient hairline via mask) */
+:root:not([data-glass="frosted"]) :is(.ip-panel:not(.ip-panel--solid):not(.ip-panel--sunken),.ip-dock,.ip-menu,.ip-dialog,.ip-btn--glass,.ip-iconbtn--glass,.ip-iconbtn--scrim,.ip-chip:not(.is-selected),.ip-select__btn,.ip-input--search,.ip-badge--glass,.ip-tab.is-selected,.ip-skip:not(.ip-skip--next),.ip-pinpad__key:not(.ip-pinpad__key--ghost),.ip-btn--primary,.ip-btn--accent,.ip-iconbtn--solid,.ip-iconbtn--accent,.ip-dock__item.is-active){position:relative;isolation:isolate}
+:root:not([data-glass="frosted"]) :is(.ip-panel:not(.ip-panel--solid):not(.ip-panel--sunken),.ip-dock,.ip-menu,.ip-dialog,.ip-btn--glass,.ip-iconbtn--glass,.ip-iconbtn--scrim,.ip-chip:not(.is-selected),.ip-select__btn,.ip-input--search,.ip-badge--glass,.ip-tab.is-selected,.ip-skip:not(.ip-skip--next),.ip-pinpad__key:not(.ip-pinpad__key--ghost))::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:var(--liquid-rim);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);pointer-events:none;z-index:1}
+:root:not([data-glass="frosted"]) .ip-panel--raised::after{opacity:.6}
+
+/* Liquid solids: white CTA, red accent, active dock disc get a glossy specular */
+:root:not([data-glass="frosted"]) :is(.ip-btn--primary,.ip-iconbtn--solid){background:linear-gradient(180deg,#fff 0%,#EDEEF1 100%);box-shadow:var(--liquid-shadow-solid),0 6px 18px rgba(0,0,0,.28)}
+:root:not([data-glass="frosted"]) :is(.ip-btn--accent,.ip-iconbtn--accent,.ip-dock__item.is-active){background:linear-gradient(180deg,rgba(255,110,115,.95) 0%,rgba(238,46,55,.92) 45%,rgba(200,30,39,.95) 100%);box-shadow:inset 0 1px 1px rgba(255,255,255,.5),inset 0 -2px 6px rgba(120,0,8,.35),0 8px 24px var(--accent-glow)}
+:root:not([data-glass="frosted"]) .ip-dock--light .ip-dock__item.is-active{background:linear-gradient(180deg,#fff 0%,#EDEEF1 100%);box-shadow:var(--liquid-shadow-solid)}
+:root:not([data-glass="frosted"]) :is(.ip-btn,.ip-iconbtn,.ip-chip,.ip-tab,.ip-dock__item):is(:focus-visible,.is-focused){box-shadow:var(--shadow-focus)}
+
+/* Refraction (Chromium): lensing displacement of the backdrop. Enabled by <LiquidFilter /> */
+:root[data-liquid-refraction]:not([data-glass="frosted"]) :is(.ip-dock,.ip-btn--glass,.ip-iconbtn--glass,.ip-iconbtn--scrim,.ip-tabs--contained,.ip-select__btn,.ip-chip:not(.is-selected),.ip-skip:not(.ip-skip--next)){backdrop-filter:url(#ip-liquid-refraction) var(--liquid-filter);-webkit-backdrop-filter:var(--liquid-filter)}
+:root[data-liquid-refraction]:not([data-glass="frosted"]) :is(.ip-menu,.ip-dialog){backdrop-filter:url(#ip-liquid-refraction) var(--liquid-filter-panel);-webkit-backdrop-filter:var(--liquid-filter-panel)}
+:root:not([data-glass="frosted"]) :is(.ip-episode__dur,.ip-episode__state,.ip-dialog__close){position:absolute}
+:root:not([data-glass="frosted"]) :is(.ip-panel,.ip-dock,.ip-menu,.ip-dialog,.ip-btn--glass,.ip-iconbtn--glass,.ip-iconbtn--scrim,.ip-chip:not(.is-selected),.ip-badge--glass,.ip-skip:not(.ip-skip--next)){text-shadow:0 1px 2px rgba(0,0,0,.18)}
+:root:not([data-glass="frosted"]) .ip-menu__item:hover,:root:not([data-glass="frosted"]) .ip-navitem:hover{background:rgba(255,255,255,.14)}
+:root:not([data-glass="frosted"]) .ip-navitem.is-active,:root:not([data-glass="frosted"]) .ip-channel.is-selected{background:var(--liquid-sheen),rgba(255,255,255,.22);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}

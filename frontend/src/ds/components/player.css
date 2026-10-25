@@ -1,0 +1,24 @@
+/* Player: SeekBar, SkipPrompt */
+.ip-seek{display:flex;align-items:center;gap:14px;width:100%}
+.ip-seek__time{font:var(--fw-regular) var(--fs-caption)/1 var(--font-mono);color:var(--text-secondary);min-width:52px}
+.ip-seek__time--end{text-align:right}
+.ip-seek__track{position:relative;flex:1;height:20px;display:flex;align-items:center;cursor:pointer}
+.ip-seek__rail{position:relative;width:100%;height:4px;border-radius:var(--radius-pill);background:var(--progress-track);transition:height var(--dur-fast) var(--ease-out)}
+.ip-seek__track:hover .ip-seek__rail{height:6px}
+.ip-seek__buf,.ip-seek__fill,.ip-seek__mark{position:absolute;top:0;bottom:0;border-radius:inherit}
+.ip-seek__buf{left:0;background:var(--progress-buffer)}
+.ip-seek__fill{left:0;background:var(--progress-fill)}
+.ip-seek__mark{background:rgba(255,255,255,.55);border-radius:0}
+.ip-seek__thumb{position:absolute;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--white);box-shadow:0 2px 8px rgba(0,0,0,.5);transform:scale(.75);transition:transform var(--dur-fast) var(--ease-out)}
+.ip-seek__track:hover .ip-seek__thumb{transform:scale(1)}
+.ip-seek__tip{position:absolute;bottom:22px;transform:translateX(-50%);padding:4px 8px;border-radius:var(--radius-xs);background:rgba(28,29,34,.92);font:var(--fw-regular) var(--fs-micro)/1 var(--font-mono);white-space:nowrap;pointer-events:none}
+
+.ip-skip{position:relative;display:inline-flex;align-items:center;gap:10px;height:var(--control-lg);padding:0 22px;border-radius:var(--radius-md);border:1px solid var(--white-a40);background:var(--black-a60);color:var(--text-primary);font:var(--fw-medium) var(--fs-body)/1 var(--font-sans);cursor:pointer;overflow:hidden;outline:none;backdrop-filter:var(--glass-filter-control);-webkit-backdrop-filter:var(--glass-filter-control);transition:background-color var(--dur-fast),transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast)}
+.ip-skip:hover{background:var(--black-a80);border-color:var(--white-a72)}
+.ip-skip:focus-visible,.ip-skip.is-focused{box-shadow:var(--shadow-focus);transform:scale(1.04)}
+.ip-skip--next{background:var(--surface-inverse);color:var(--text-inverse);border-color:transparent}
+.ip-skip--next:hover{background:var(--ink-100)}
+.ip-skip__fill{position:absolute;inset:0;transform-origin:left;background:var(--white-a16);animation-name:ip-countdown;animation-timing-function:linear;animation-fill-mode:forwards}
+.ip-skip--next .ip-skip__fill{background:rgba(5,6,8,.10)}
+.ip-skip__label,.ip-skip svg{position:relative}
+.ip-skip__sub{position:relative;font-weight:var(--fw-regular);opacity:.65;font-size:var(--fs-small)}

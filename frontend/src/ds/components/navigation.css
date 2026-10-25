@@ -1,0 +1,27 @@
+/* Navigation: Dock, NavItem */
+.ip-dock{display:inline-flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border-radius:var(--radius-pill);background:var(--surface-panel);border:1px solid var(--border-default);box-shadow:var(--shadow-panel);backdrop-filter:var(--glass-filter);-webkit-backdrop-filter:var(--glass-filter)}
+.ip-dock--horizontal{flex-direction:row}
+.ip-dock__sep{width:24px;height:1px;background:var(--border-default);margin:4px 0}
+.ip-dock--horizontal .ip-dock__sep{width:1px;height:24px;margin:0 4px}
+.ip-dock__item{position:relative;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;border:0;background:transparent;color:var(--text-secondary);cursor:pointer;outline:none;transition:background-color var(--dur-fast),color var(--dur-fast),transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast)}
+.ip-dock__item:hover{background:var(--white-a08);color:var(--text-primary)}
+.ip-dock__item.is-active{background:var(--accent);color:var(--accent-fg);box-shadow:var(--shadow-accent-glow)}
+.ip-dock--light .ip-dock__item.is-active{background:var(--surface-inverse);color:var(--text-inverse);box-shadow:none}
+.ip-dock__item:focus-visible,.ip-dock__item.is-focused{box-shadow:var(--shadow-focus);transform:scale(1.08)}
+.ip-dock__item .ip-dock__tip{position:absolute;left:calc(100% + 14px);top:50%;transform:translate(-4px,-50%);padding:6px 10px;border-radius:var(--radius-sm);background:rgba(28,29,34,.92);border:1px solid var(--border-default);font:var(--type-label);color:var(--text-primary);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity var(--dur-fast),transform var(--dur-fast) var(--ease-out)}
+.ip-dock__item:hover .ip-dock__tip{opacity:1;transform:translate(0,-50%)}
+.ip-dock--horizontal .ip-dock__tip{display:none}
+.ip-dock__dot{position:absolute;top:10px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--ink-900)}
+
+.ip-navitem{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 14px;border-radius:var(--radius-md);border:0;background:transparent;color:var(--text-secondary);font:var(--fw-regular) var(--fs-body)/1.2 var(--font-sans);text-align:left;cursor:pointer;outline:none;transition:background-color var(--dur-fast),color var(--dur-fast),box-shadow var(--dur-fast)}
+.ip-navitem:hover{background:var(--white-a06);color:var(--text-primary)}
+.ip-navitem.is-active{background:var(--white-a12);color:var(--text-primary);font-weight:var(--fw-medium);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.ip-navitem:focus-visible,.ip-navitem.is-focused{box-shadow:var(--shadow-focus)}
+.ip-navitem__label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ip-navitem__meta{font:var(--type-caption);color:var(--text-tertiary)}
+.ip-navitem.is-active .ip-navitem__icon{color:var(--accent-hover)}
+.ip-navitem__icon{display:flex;color:inherit}
+.ip-navitem--sm{min-height:36px;font-size:var(--fs-small);padding:0 12px;gap:10px}
+.ip-navitem--plain.is-active{background:transparent!important;box-shadow:none!important;font-weight:var(--fw-semibold)}
+.ip-navitem--plain:hover{background:transparent!important;color:var(--text-primary)}
+.ip-dock--sm{padding:6px;gap:4px}.ip-dock--sm .ip-dock__item{width:40px;height:40px}.ip-dock--sm .ip-dock__dot{top:8px;right:8px}

@@ -1,0 +1,57 @@
+/* Colors — dark-only, glass-over-cinema palette. */
+:root{
+/* Ink ramp (neutrals, very slightly cool) */
+--ink-950:#050608;--ink-900:#0B0C0F;--ink-850:#111215;--ink-800:#17181C;--ink-700:#202126;--ink-600:#2B2C32;--ink-500:#3A3B42;--ink-400:#5A5B63;--ink-300:#8A8B93;--ink-200:#B9BAC1;--ink-100:#E4E5E9;--white:#FFFFFF;--black:#000000;
+/* White alpha (glass fills, strokes, secondary text) */
+--white-a04:rgba(255,255,255,.04);--white-a06:rgba(255,255,255,.06);--white-a08:rgba(255,255,255,.08);--white-a12:rgba(255,255,255,.12);--white-a16:rgba(255,255,255,.16);--white-a24:rgba(255,255,255,.24);--white-a32:rgba(255,255,255,.32);--white-a40:rgba(255,255,255,.40);--white-a52:rgba(255,255,255,.52);--white-a72:rgba(255,255,255,.72);--white-a88:rgba(255,255,255,.88);
+--black-a24:rgba(5,6,8,.24);--black-a40:rgba(5,6,8,.40);--black-a60:rgba(5,6,8,.60);--black-a80:rgba(5,6,8,.80);
+/* Signal red (brand accent) */
+--red-300:#FF8A8E;--red-400:#FF5A60;--red-500:#EE2E37;--red-600:#C81E27;--red-700:#99151C;
+/* Support hues */
+--amber-400:#F7C548;--green-400:#3DD68C;--blue-400:#5AA9FF;--orange-400:#FF8A3D;--violet-400:#A98BFF;
+
+/* ---- Semantic aliases ---- */
+--bg-app:var(--ink-950);
+--surface-panel:rgba(22,23,27,.62);
+--surface-panel-solid:var(--ink-850);
+--surface-sunken:rgba(0,0,0,.28);
+--surface-raised:var(--white-a06);
+--surface-control:var(--white-a12);
+--surface-control-hover:var(--white-a16);
+--surface-control-active:var(--white-a24);
+--surface-selected:var(--white-a16);
+--surface-inverse:var(--white);
+--surface-scrim:rgba(5,6,8,.72);
+
+--text-primary:var(--white);
+--text-secondary:var(--white-a72);
+--text-tertiary:var(--white-a52);
+--text-disabled:var(--white-a32);
+--text-inverse:var(--ink-950);
+--text-accent:var(--red-400);
+
+--border-subtle:var(--white-a08);
+--border-default:var(--white-a12);
+--border-strong:var(--white-a32);
+--border-highlight:rgba(255,255,255,.18);
+
+--accent:var(--red-500);
+--accent-hover:var(--red-400);
+--accent-press:var(--red-600);
+--accent-fg:var(--white);
+--accent-soft:rgba(238,46,55,.16);
+--accent-glow:rgba(238,46,55,.45);
+
+--status-live:var(--red-500);
+--status-success:var(--green-400);
+--status-warning:var(--amber-400);
+--status-info:var(--blue-400);
+--status-danger:var(--red-400);
+--rating:var(--amber-400);
+--trending:var(--orange-400);
+
+--progress-track:var(--white-a24);
+--progress-fill:var(--accent);
+--progress-buffer:var(--white-a40);
+--focus-ring:var(--white);
+}

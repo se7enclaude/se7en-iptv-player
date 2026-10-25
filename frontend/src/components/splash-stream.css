@@ -1,0 +1,45 @@
+/* se7en IPTV Player launch animation: a TV switching on (see Splash.tsx). */
+.sps { position: fixed; inset: 0; z-index: 1000; background: #030405; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-sans); color: #fff; }
+.sps-glow { position: absolute; left: 50%; top: 50%; width: 900px; height: 520px; transform: translate(-50%, -50%); background: radial-gradient(50% 50% at 50% 50%, rgba(238, 46, 55, .22), rgba(238, 46, 55, 0) 70%); opacity: 0; animation: sps-fade .9s 1.25s ease-out forwards; pointer-events: none; }
+
+/* the screen: a line of light → opens into a glass rectangle */
+.sps-screen {
+  position: relative; width: min(560px, 70vw); aspect-ratio: 16 / 9; border-radius: 28px; overflow: hidden;
+  background: #0b0c0f;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .55), inset 0 0 40px rgba(255, 255, 255, .06), 0 30px 90px rgba(0, 0, 0, .6);
+  transform: scaleX(0) scaleY(.006); filter: brightness(3);
+  animation: sps-line .32s cubic-bezier(.22, 1, .36, 1) forwards, sps-open .36s .34s cubic-bezier(.22, 1, .36, 1) forwards;
+}
+.sps-screen::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(140deg, rgba(255,255,255,.95) 0%, rgba(255,255,255,.35) 22%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.25) 78%, rgba(255,255,255,.8) 100%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); pointer-events: none; }
+.sps-static { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: .55; animation: sps-static-out .45s 1.3s ease-in forwards; }
+.sps-scan { position: absolute; left: 0; right: 0; height: 30%; top: -30%; background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.10), rgba(255,255,255,0)); animation: sps-scan 1.1s .7s linear 2; pointer-events: none; }
+.sps-ch { position: absolute; left: 22px; top: 18px; font: 500 15px/1 var(--font-mono); letter-spacing: .08em; color: #7dff8a; text-shadow: 0 0 8px rgba(125, 255, 138, .7); opacity: 0; animation: sps-fade .1s .72s forwards, sps-fade-out .3s 1.75s forwards; }
+
+.sps-brand { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; opacity: 0; transform: scale(1.06); filter: blur(6px); animation: sps-brand .55s 1.45s cubic-bezier(.22, 1, .36, 1) forwards; }
+.sps-word { font: 600 clamp(52px, 8vw, 84px)/1 var(--font-sans); letter-spacing: -.035em; }
+.sps-seven { color: #EE2E37; text-shadow: 0 0 28px rgba(238, 46, 55, .6); }
+.sps-app { font: 500 15px/1 var(--font-sans); letter-spacing: .5em; text-transform: uppercase; color: rgba(255, 255, 255, .72); margin-left: .5em; }
+.sps-live { position: absolute; right: 18px; top: 16px; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 6px; background: #EE2E37; font: 600 11px/1 var(--font-sans); letter-spacing: .08em; opacity: 0; animation: sps-fade .3s 1.85s forwards; }
+.sps-live i { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: ip-pulse 1.4s ease-in-out infinite; }
+
+.sps-tag { margin-top: 26px; font: 400 14px/1.4 var(--font-sans); color: rgba(255, 255, 255, .6); opacity: 0; animation: sps-fade .5s 1.95s forwards; }
+.sps-foot { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; align-items: center; justify-content: center; gap: 14px; font: 500 10px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .4); opacity: 0; animation: sps-fade .4s .9s forwards; }
+.sps-bar { width: 120px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, .14); overflow: hidden; }
+.sps-bar > span { display: block; height: 100%; width: 35%; background: #EE2E37; transition: width .5s cubic-bezier(.22, 1, .36, 1); animation: sps-tune 1.6s ease-in-out infinite alternate; }
+.sps-bar > span.full { width: 100%; animation: none; }
+
+/* exit: the picture collapses into a line, then a dot, like an old TV switching off */
+.sps.leaving .sps-screen { animation: sps-off .48s cubic-bezier(.55, 0, .45, 1) forwards; }
+.sps.leaving .sps-tag, .sps.leaving .sps-foot, .sps.leaving .sps-glow { animation: sps-fade-out .25s forwards; }
+.sps.leaving { animation: sps-fade-out .16s .46s forwards; }
+
+@keyframes sps-line { to { transform: scaleX(1) scaleY(.006); } }
+@keyframes sps-open { from { transform: scaleX(1) scaleY(.006); filter: brightness(3); } to { transform: none; filter: none; } }
+@keyframes sps-off { 0% { transform: none; filter: none; } 55% { transform: scaleX(1) scaleY(.006); filter: brightness(3); } 100% { transform: scaleX(0) scaleY(.006); filter: brightness(4); } }
+@keyframes sps-static-out { to { opacity: 0; } }
+@keyframes sps-scan { to { top: 100%; } }
+@keyframes sps-brand { to { opacity: 1; transform: none; filter: none; } }
+@keyframes sps-fade { to { opacity: 1; } }
+@keyframes sps-fade-out { to { opacity: 0; } }
+@keyframes sps-tune { from { transform: translateX(-40%); } to { transform: translateX(220%); } }
+@media (prefers-reduced-motion: reduce) { .sps * { animation-duration: .01s !important; animation-delay: 0s !important; } }

@@ -1,0 +1,29 @@
+se7en IPTV Player — lecteur IPTV pour Windows (Xtream Codes, M3U, XMLTV)
+=====================================================================
+
+se7en IPTV Player ne contient et ne fournit aucune chaîne, aucune liste ni aucun abonnement :
+il lit l'abonnement que tu as déjà (identifiants Xtream Codes ou lien M3U de ton fournisseur).
+
+Version installée (recommandée) : installe-la depuis Seventh OS, ou lance se7en-IPTV-Player-Setup.exe.
+  - Le lecteur vidéo (libmpv) et FFmpeg (enregistrements) sont inclus : rien d'autre à télécharger.
+  - se7en IPTV Player se met à jour tout seul.
+  - Si Windows affiche "Windows a protégé votre ordinateur" :
+    cliquer sur "Informations complémentaires" puis "Exécuter quand même".
+
+Utilisation :
+1. "Ajoute ton abonnement" : serveur, nom d'utilisateur et mot de passe (Xtream Codes),
+   ou le lien / fichier de ta liste M3U. La connexion est testée avant l'ajout.
+2. TV en direct : catégories, favoris, guide des programmes. ↑ ↓ pour zapper, les chiffres pour une chaîne.
+3. Films et séries : reprise là où tu t'es arrêté, épisode suivant automatique.
+4. Replay et enregistrements (dossier Vidéos\se7en IPTV Player). Un enregistrement compte comme une connexion
+   de ton abonnement : se7en IPTV Player ne dépasse jamais la limite.
+
+Tes identifiants sont chiffrés par Windows (DPAPI) et ne sont envoyés qu'au serveur de ton abonnement.
+
+Version portable (ce dossier) :
+1. Extraire TOUT le zip (clic droit sur le .zip > Extraire tout...).
+2. Double-cliquer sur se7en-iptv-player.exe. Tes réglages restent dans le dossier "data" à côté.
+
+En cas de problème : bouton Journal en haut à droite, ou envoyer le fichier data\logs\crash.log.
+
+Lecteur : mpv / libmpv (https://mpv.io, licence GPL-3.0), build de shinchiro/mpv-winbuild-cmake.

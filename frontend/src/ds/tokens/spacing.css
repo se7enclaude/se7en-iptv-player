@@ -1,0 +1,17 @@
+/* Spacing, radii, layout metrics. Design canvas is 1440×900 (scale ×1.333 for 1920×1080 TV). */
+:root{
+--space-0-5:2px;--space-1:4px;--space-1-5:6px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;--space-16:64px;--space-20:80px;
+--radius-xs:6px;--radius-sm:10px;--radius-md:14px;--radius-lg:18px;--radius-xl:24px;--radius-2xl:32px;--radius-3xl:40px;--radius-pill:999px;
+--control-sm:32px; /* @kind spacing */
+--control-md:40px; /* @kind spacing */
+--control-lg:52px; /* @kind spacing */
+--control-xl:72px; /* @kind spacing */
+--dock-width:64px; /* @kind spacing */
+--sidebar-width:248px; /* @kind spacing */
+--topbar-height:64px; /* @kind spacing */
+--panel-gap:16px; /* @kind spacing */
+--safe-area:40px; /* @kind spacing */
+--poster-w:176px; /* @kind spacing */
+--poster-ratio:2/3; /* @kind other */
+--wide-ratio:16/9; /* @kind other */
+}
