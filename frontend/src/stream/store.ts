@@ -28,6 +28,8 @@ interface StreamStore {
   query: string;
   /** A recording is running or scheduled, or a reminder is set (dot on the bell and the dock). */
   recording: boolean;
+  /** The films / series page opens on this category (a chip of the home screen). */
+  vodCategory: string | null;
 
   load: () => Promise<void>;
   play: (b: Parameters<typeof stream.play>[0]) => Promise<boolean>;
@@ -67,6 +69,7 @@ export const useStream = create<StreamStore>((set, get) => ({
   ambient: null,
   query: "",
   recording: false,
+  vodCategory: null,
 
   load: async () => {
     const st = await stream.state();

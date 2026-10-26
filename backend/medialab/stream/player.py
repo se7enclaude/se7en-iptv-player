@@ -321,113 +321,139 @@ def _glass(ev: list[str], cx: float, cy: float, r: float, hot: bool = False, sol
     ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&H{'60' if hot else '98'}&\1a&HFF&\p1}}{_circle(cx, cy, r)}")
 
 
-def _icon(ev: list[str], kind: str, cx: float, cy: float, dark: bool = False, state: dict | None = None) -> None:
+def _icon(ev: list[str], kind: str, cx: float, cy: float, dark: bool = False, state: dict | None = None, k: float = 1.0) -> None:
+    """Pictogramme dessiné autour de (cx, cy) ; k le met à l'échelle de la bulle."""
     col = r"\1c&H100D0B&" if dark else r"\1c&HFFFFFF&"
     pre = rf"{{\an7\pos(0,0)\bord0\shad0{col}\1a&H00&\p1}}"
+    x, y = cx, cy
 
     def shape(d: str) -> None:
         ev.append(pre + d)
 
     def text(t: str, size: int = 26) -> None:
-        ev.append(rf"{{\an5\pos({cx:.0f},{cy:.0f})\fnManrope\b1\fs{size}{col}\bord0\shad0}}{t}")
+        ev.append(rf"{{\an5\pos({cx:.0f},{cy:.0f})\fnManrope\b1\fs{size * k:.0f}{col}\bord0\shad0}}{t}")
 
-    x, y = cx, cy
+    def p(dx: float, dy: float) -> str:
+        return f"{x + dx * k:.0f} {y + dy * k:.0f}"
+
+    def rr(dx: float, dy: float, w: float, h: float, r: float) -> str:
+        return _rr(x + dx * k, y + dy * k, w * k, h * k, r * k)
+
     if kind == "play":
-        shape(f"m {x - 9:.0f} {y - 15:.0f} l {x + 16:.0f} {y:.0f} l {x - 9:.0f} {y + 15:.0f}")
+        shape(f"m {p(-9, -15)} l {p(16, 0)} l {p(-9, 15)}")
     elif kind == "pause":
-        shape(_rr(x - 12, y - 14, 8, 28, 3))
-        shape(_rr(x + 4, y - 14, 8, 28, 3))
+        shape(rr(-12, -14, 8, 28, 3))
+        shape(rr(4, -14, 8, 28, 3))
     elif kind in ("back", "fwd"):
         text("−10" if kind == "back" else "+10", 24)
     elif kind == "subs":
-        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\1a&HFF&\p1}}{_rr(x - 19, y - 13, 38, 26, 6)}")
-        ev.append(rf"{{\an5\pos({x:.0f},{y + 1:.0f})\fnManrope\b1\fs17{col}\bord0\shad0}}CC")
+        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\1a&HFF&\p1}}{rr(-19, -13, 38, 26, 6)}")
+        ev.append(rf"{{\an5\pos({x:.0f},{y + 1:.0f})\fnManrope\b1\fs{17 * k:.0f}{col}\bord0\shad0}}CC")
     elif kind == "audio":
-        for k, h in enumerate((10, 22, 30, 18, 8)):
-            shape(_rr(x - 17 + k * 7.5, y - h / 2, 4.5, h, 2.2))
+        for n, h in enumerate((10, 22, 30, 18, 8)):
+            shape(rr(-17 + n * 7.5, -h / 2, 4.5, h, 2.2))
     elif kind in ("up", "down"):
         d = -1 if kind == "up" else 1
-        shape(f"m {x - 13:.0f} {y - 6 * d:.0f} l {x + 13:.0f} {y - 6 * d:.0f} l {x:.0f} {y + 8 * d:.0f}")
+        shape(f"m {p(-13, -6 * d)} l {p(13, -6 * d)} l {p(0, 8 * d)}")
     elif kind == "mute":
-        shape(f"m {x - 16:.0f} {y - 6:.0f} l {x - 8:.0f} {y - 6:.0f} l {x + 2:.0f} {y - 15:.0f} l {x + 2:.0f} {y + 15:.0f} "
-              f"l {x - 8:.0f} {y + 6:.0f} l {x - 16:.0f} {y + 6:.0f}")
+        shape(f"m {p(-16, -6)} l {p(-8, -6)} l {p(2, -15)} l {p(2, 15)} l {p(-8, 6)} l {p(-16, 6)}")
         if (state or {}).get("muted"):
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H5A5AF0&\1a&H00&\p1}}m {x + 6:.0f} {y - 9:.0f} l {x + 9:.0f} {y - 12:.0f} "
-                      f"l {x + 19:.0f} {y - 2:.0f} l {x + 16:.0f} {y + 1:.0f}")
+            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H5A5AF0&\1a&H00&\p1}}m {p(6, -9)} l {p(9, -12)} l {p(19, -2)} l {p(16, 1)}")
         else:
-            shape(_rr(x + 7, y - 5, 4, 10, 2))
-            shape(_rr(x + 14, y - 10, 4, 20, 2))
+            shape(rr(7, -5, 4, 10, 2))
+            shape(rr(14, -10, 4, 20, 2))
     elif kind in ("fs_on", "fs_off"):
         # quatre coins : vers l'extérieur pour entrer en plein écran, vers le centre pour en sortir
         out = kind == "fs_on"
         a, b, arm, t = (15, 12, 9, 4) if out else (6, 5, 9, 4)
         for sx in (-1, 1):
             for sy in (-1, 1):
-                px, py = x + sx * a, y + sy * b
+                px, py = sx * a, sy * b
                 dx, dy = (-sx, -sy) if out else (sx, sy)  # sens des branches depuis le coin
-                shape(_rr(min(px, px + dx * arm) - t / 2, py - t / 2, arm + t, t, 1.5))
-                shape(_rr(px - t / 2, min(py, py + dy * arm) - t / 2, t, arm + t, 1.5))
+                shape(rr(min(px, px + dx * arm) - t / 2, py - t / 2, arm + t, t, 1.5))
+                shape(rr(px - t / 2, min(py, py + dy * arm) - t / 2, t, arm + t, 1.5))
+
+
+def _pill(ev: list[str], cx: float, bottom: float, text: str, size: int = 22) -> None:
+    """Petite pastille sombre centrée sur cx, posée au-dessus de « bottom » (nom d'une bulle, temps survolé)."""
+    w = 28 + size * 0.56 * len(text)
+    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H38&\p1}}{_rr(cx - w / 2, bottom - 38, w, 38, 19)}")
+    ev.append(rf"{{\an5\pos({cx:.0f},{bottom - 19:.0f})\fnManrope\b1\fs{size}\1c&HFFFFFF&\bord0\shad0}}{_esc(text)}")
+
 
 def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
-    """Bulles en bas au milieu : −10 s, lecture / pause, +10 s · langue audio, sous-titres · chaîne − / + (direct) ·
-    son · plein écran. Le nom de la bulle survolée s'affiche au-dessus ; audio et sous-titres ouvrent une petite liste."""
+    """En bas : la barre de progression sur toute la largeur (films, séries, replay ; comme YouTube : on clique où on
+    veut, le temps visé s'affiche au survol), puis de petites bulles au milieu : −10 s, lecture / pause, +10 s · langue
+    audio, sous-titres · chaîne − / + (direct) · son · plein écran. Audio et sous-titres ouvrent une petite liste."""
     hits: list[dict] = []
     live = state.get("kind") == "live"
     paused = bool(state.get("paused"))
     full = bool(state.get("fullscreen"))
     hover = state.get("hover")
     vol = "Son coupé" if state.get("muted") else f"Son {int(state.get('volume') or 0)} %"
+    small, big, k = 23, 30, 0.66
     groups = [
-        [("back", "back", "Reculer de 10 s", 34)] if not live else [],
-        [("pause", "play" if paused else "pause", "Lecture" if paused else "Pause", 44)],
-        [("fwd", "fwd", "Avancer de 10 s", 34)] if not live else [],
-        [("audio", "audio", "Langue audio", 34), ("subs", "subs", "Sous-titres", 34)],
-        [("zap_up", "up", "Chaîne précédente", 34), ("zap_down", "down", "Chaîne suivante", 34)] if live else [],
-        [("mute", "mute", vol, 34)],
-        [("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)", 34)],
+        [("back", "back", "Reculer de 10 s", small)] if not live else [],
+        [("pause", "play" if paused else "pause", "Lecture" if paused else "Pause", big)],
+        [("fwd", "fwd", "Avancer de 10 s", small)] if not live else [],
+        [("audio", "audio", "Langue audio", small), ("subs", "subs", "Sous-titres", small)],
+        [("zap_up", "up", "Chaîne précédente", small), ("zap_down", "down", "Chaîne suivante", small)] if live else [],
+        [("mute", "mute", vol, small)],
+        [("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)", small)],
     ]
     groups = [g for g in groups if g]
-    gap, sep = 16, 34
+    gap, sep = 10, 22
     width = sum(sum(2 * r for *_x, r in g) + gap * (len(g) - 1) for g in groups) + sep * (len(groups) - 1)
-    cy = H - 96
+    cy = H - 58
     x = (W - width) / 2
-    # la piste : progression (films, séries, replay) ou « En direct », juste au-dessus des bulles
+    # voile sombre en dégradé en bas, pour lire la barre et les bulles même sur une image claire
+    for n in range(24):
+        y0 = H - 240 + n * 10
+        a = 255 - int(255 * 0.5 * ((n + 1) / 24) ** 1.6)
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H000000&\1a&H{a:02X}&\p1}}m 0 {y0} l {W} {y0} l {W} {y0 + 10} l 0 {y0 + 10}")
+    # la barre de progression (ou « En direct »), juste au-dessus des bulles
     dur, pos = state.get("duration") or 0, state.get("position") or 0
-    tw, ty = min(1100, max(width + 120, 760)), cy - 84
-    tx = (W - tw) / 2
+    tx, tw, ty = 72, W - 144, cy - 54
+    tip = None  # (x, texte) au-dessus de la barre
     if dur > 0 and not live:
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB8&\p1}}{_rr(tx, ty, tw, 8, 4)}")
+        frac = max(0.0, min(1.0, pos / dur))
+        over = bool(hover and tx - 12 <= hover[0] <= tx + tw + 12 and ty - 24 <= hover[1] <= ty + 24)
+        bh = 10 if over else 6
+        y0 = ty - bh / 2
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB0&\p1}}{_rr(tx, y0, tw, bh, bh / 2)}")
         cache = state.get("cached") or 0
         if cache > pos:
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H98&\p1}}{_rr(tx, ty, max(8, tw * min(1, cache / dur)), 8, 4)}")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_rr(tx, ty, max(8, tw * min(1, pos / dur)), 8, 4)}")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_circle(tx + tw * min(1, pos / dur), ty + 4, 9)}")
-        ev.append(rf"{{\an6\pos({tx - 18:.0f},{ty + 4:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{_clock(pos)}")
-        ev.append(rf"{{\an4\pos({tx + tw + 18:.0f},{ty + 4:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{_clock(dur)}")
-        hits.append({"id": "seek", "x": tx, "y": ty - 16, "w": tw, "h": 40})
+            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H90&\p1}}{_rr(tx, y0, max(bh, tw * min(1, cache / dur)), bh, bh / 2)}")
+        if over:
+            hf = max(0.0, min(1.0, (hover[0] - tx) / tw))
+            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H70&\p1}}{_rr(tx, y0, max(bh, tw * hf), bh, bh / 2)}")
+            tip = (tx + tw * hf, _clock(hf * dur))
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_rr(tx, y0, max(bh, tw * frac), bh, bh / 2)}")
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(tx + tw * frac, ty, 10 if over else 7)}")
+        hits.append({"id": "seek", "x": tx, "y": ty - 24, "w": tw, "h": 48})
+        # à gauche : où on en est ; à droite : à quelle heure ça finit
+        ev.append(rf"{{\an4\pos({tx:.0f},{cy:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{_clock(pos)} / {_clock(dur)}")
+        end = time.strftime("%H:%M", time.localtime(time.time() + max(0.0, dur - pos) / max(0.1, state.get("speed") or 1)))
+        ev.append(rf"{{\an6\pos({tx + tw:.0f},{cy:.0f})\fnManrope\b0\fs22\1c&HE6E6E6&\bord0\shad1\4a&H80&}}Fin à {end}")
     else:
         txt = "Mise en mémoire…" if state.get("buffering") else f"En direct · {time.strftime('%H:%M')}"
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H10&\p1}}{_rr(W / 2 - 110, ty - 16, 220, 38, 19)}")
-        ev.append(rf"{{\an5\pos({W // 2},{ty + 3:.0f})\fnManrope\b1\fs22\1c&HFFFFFF&\bord0\shad0}}{txt}")
-    label = None
+        ev.append(rf"{{\an4\pos({tx + 18:.0f},{cy:.0f})\fnManrope\b1\fs22\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{txt}")
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(tx + 5, cy, 5)}")
     for g in groups:
         for hid, icon, name, r in g:
             cx = x + r
             hot = bool(hover and (hover[0] - cx) ** 2 + (hover[1] - cy) ** 2 <= r * r)
             primary = hid == "pause"
             _glass(ev, cx, cy, r, hot, solid=primary)
-            _icon(ev, icon, cx, cy, dark=primary, state=state)
+            _icon(ev, icon, cx, cy, dark=primary, state=state, k=k)
             hits.append({"id": hid, "x": cx - r, "y": cy - r, "w": 2 * r, "h": 2 * r})
-            if hot:  # au-dessus de la piste (progression / « En direct »), pour ne rien cacher
-                label = (cx, ty - 22, name)
+            if hot:
+                tip = (cx, name)
             x += 2 * r + gap
         x += sep - gap
-    # le nom de la bulle survolée, dans une petite pastille de verre
-    if label and not state.get("menu"):
-        lx, ly, name = label
-        lw = 30 + 14 * len(name)
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H40&\p1}}{_rr(lx - lw / 2, ly - 46, lw, 44, 22)}")
-        ev.append(rf"{{\an5\pos({lx:.0f},{ly - 24:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad0}}{_esc(name)}")
+    # le nom de la bulle survolée, ou le temps visé sur la barre, dans une petite pastille au-dessus de la barre
+    if tip and not state.get("menu"):
+        _pill(ev, max(80, min(W - 80, tip[0])), ty - 14, tip[1])
     # liste des pistes (audio ou sous-titres) au-dessus de sa bulle
     menu = state.get("menu")
     if menu in ("aid", "sid"):
@@ -435,23 +461,26 @@ def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
         tracks = [t for t in state.get("tracks") or [] if t.get("type") == kind]
         rows = ([{"id": "no", "label": "Désactivés", "selected": not any(t.get("selected") for t in tracks)}] if menu == "sid" else []) + [
             {"id": str(t.get("id")), "label": track_label(t, n + 1), "selected": bool(t.get("selected"))} for n, t in enumerate(tracks)]
-        if not rows:
-            rows = [{"id": "", "label": "Aucune piste", "selected": False}]
+        if not tracks:  # le fichier du fournisseur n'en contient pas : on le dit, plutôt qu'une liste vide
+            rows.append({"id": "", "label": "Aucun sous-titre dans ce fichier" if menu == "sid" else "Une seule langue",
+                         "selected": False, "note": True})
         anchor = next(h for h in hits if h["id"] == ("audio" if menu == "aid" else "subs"))
-        mw, rh = 380, 56
-        mh = 20 + rh * len(rows) + 44
-        mx, my = anchor["x"] + anchor["w"] / 2 - mw / 2, anchor["y"] - 24 - mh
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H30&\p1}}{_rr(mx, my, mw, mh, 26)}")
-        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&HA8&\1a&HFF&\p1}}{_rr(mx, my, mw, mh, 26)}")
-        ev.append(rf"{{\an7\pos({mx + 24:.0f},{my + 16:.0f})\fnManrope\b1\fs22\1c&HB8B8B8&\bord0\shad0}}{'Langue audio' if menu == 'aid' else 'Sous-titres'}")
-        for k, row in enumerate(rows):
-            ry = my + 52 + k * rh
-            hot = bool(hover and mx <= hover[0] <= mx + mw and ry <= hover[1] <= ry + rh)
+        mw, rh = 360, 50
+        mh = 16 + rh * len(rows) + 40
+        mx = max(16, min(W - mw - 16, anchor["x"] + anchor["w"] / 2 - mw / 2))
+        my = anchor["y"] - 20 - mh
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H30&\p1}}{_rr(mx, my, mw, mh, 24)}")
+        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&HA8&\1a&HFF&\p1}}{_rr(mx, my, mw, mh, 24)}")
+        ev.append(rf"{{\an7\pos({mx + 22:.0f},{my + 14:.0f})\fnManrope\b1\fs20\1c&HB8B8B8&\bord0\shad0}}{'Langue audio' if menu == 'aid' else 'Sous-titres'}")
+        for n, row in enumerate(rows):
+            ry = my + 46 + n * rh
+            hot = bool(hover and row["id"] and mx <= hover[0] <= mx + mw and ry <= hover[1] <= ry + rh)
             if row["selected"] or hot:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'D0' if not row['selected'] else 'B0'}&\p1}}{_rr(mx + 10, ry + 4, mw - 20, rh - 8, 20)}")
-            ev.append(rf"{{\an4\pos({mx + 30:.0f},{ry + rh / 2:.0f})\fnManrope\b{1 if row['selected'] else 0}\fs26\1c&HFFFFFF&\bord0\shad0}}{row['label']}")
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'D0' if not row['selected'] else 'B0'}&\p1}}{_rr(mx + 10, ry + 4, mw - 20, rh - 8, 18)}")
+            colour = "&H9A9A9A&" if row.get("note") else "&HFFFFFF&"
+            ev.append(rf"{{\an4\pos({mx + 28:.0f},{ry + rh / 2:.0f})\fnManrope\b{1 if row['selected'] else 0}\fs{20 if row.get('note') else 24}\1c{colour}\bord0\shad0}}{row['label']}")
             if row["selected"]:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(mx + mw - 36, ry + rh / 2, 7)}")
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(mx + mw - 34, ry + rh / 2, 6)}")
             if row["id"]:
                 hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": mx, "y": ry, "w": mw, "h": rh})
         # après les pistes (elles passent d'abord), avant les bulles : un clic dans la liste hors piste ne fait rien
@@ -740,11 +769,28 @@ class Player:
             self.show_osd(4)
             bus.publish("player", {"event": "state"})
 
+    def _duration(self) -> float:
+        """Durée du film : celle du fichier, sinon estimée d'après la position et le pourcentage lu (flux sans en-tête)."""
+        m = self.mpv
+        if m is None:
+            return 0.0
+        try:
+            d = float(m.duration or 0)
+            if d > 0:
+                return d
+            pct, pos = float(m.percent_pos or 0), float(m.time_pos or 0)
+        except Exception:  # noqa: BLE001
+            return 0.0
+        return pos * 100 / pct if pct > 0.2 and pos > 10 else 0.0
+
     def seek(self, seconds: float, absolute: bool = False) -> None:
         if self.mpv is None or not self.item or self.item.get("kind") == "live":
             return
         try:
-            self.mpv.seek(seconds, "absolute" if absolute else "relative")
+            if absolute and not self.mpv.duration and self._duration() > 0:  # durée estimée : on vise un pourcentage
+                self.mpv.seek(max(0.0, min(100.0, seconds / self._duration() * 100)), "absolute-percent")
+            else:
+                self.mpv.seek(seconds, "absolute" if absolute else "relative")
         except Exception:  # noqa: BLE001 - flux non navigable
             return
         self.show_osd(3)
@@ -834,8 +880,8 @@ class Player:
                     self.toggle_mute()
                 elif hid in ("back", "fwd"):
                     self.seek(-10 if hid == "back" else 10)
-                elif hid == "seek" and self.mpv.duration:
-                    self.seek(max(0.0, min(1.0, (x - h["x"]) / h["w"])) * self.mpv.duration, absolute=True)
+                elif hid == "seek" and self._duration() > 0:
+                    self.seek(max(0.0, min(1.0, (x - h["x"]) / h["w"])) * self._duration(), absolute=True)
                 elif hid == "exit_fs":
                     self.on_action("exit_fullscreen", {})
                 elif hid == "fs":
@@ -895,7 +941,7 @@ class Player:
                 return default if v is None else v
             except Exception:  # noqa: BLE001
                 return default
-        st = {"playing": True, "paused": bool(g("pause", False)), "position": g("time-pos", 0), "duration": g("duration", 0),
+        st = {"playing": True, "paused": bool(g("pause", False)), "position": g("time-pos", 0), "duration": self._duration(),
               "buffering": bool(g("paused-for-cache", False)), "cached": (g("time-pos", 0) or 0) + (g("demuxer-cache-duration", 0) or 0),
               "volume": g("volume", 100), "muted": bool(g("mute", False))}
         if light:
@@ -919,7 +965,7 @@ class Player:
         if not self.item or self.item.get("kind") not in ("movie", "episode") or self._progress_cb is None or self.mpv is None:
             return
         try:
-            pos, dur = float(self.mpv.time_pos or 0), float(self.mpv.duration or 0)
+            pos, dur = float(self.mpv.time_pos or 0), self._duration()
         except Exception:  # noqa: BLE001
             return
         if dur > 0:

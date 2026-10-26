@@ -465,3 +465,29 @@ def test_fullscreen_bubbles_and_menus():
     _, p.hits = P.osd({**p.item, "controls": True, "fullscreen": True})
     p._click_at(*center("zap_down"))
     assert actions[-1] == ("zap", {"delta": 1})
+
+
+def test_duration_estimated_when_the_file_has_none():
+    """Certains films (.ts sans en-tête) n'ont pas de durée : on l'estime, et la barre vise un pourcentage."""
+    from medialab.stream import player as P
+
+    class M:
+        duration = None
+        percent_pos = 25.0
+        time_pos = 600.0
+
+        def __init__(self):
+            self.seeks = []
+
+        def seek(self, *a):
+            self.seeks.append(a)
+
+    p = P.Player("t", lambda: {})
+    p.mpv = M()
+    p.item = {"kind": "movie", "id": "1"}
+    assert p._duration() == 2400
+    p.seek(1200, absolute=True)
+    assert p.mpv.seeks[-1] == (50.0, "absolute-percent")
+    p.mpv.duration = 3000.0
+    p.seek(1200, absolute=True)
+    assert p.mpv.seeks[-1] == (1200, "absolute")

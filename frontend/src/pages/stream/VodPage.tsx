@@ -156,7 +156,8 @@ export function SeriesModal({ id: openId, onClose }: { id: string | null; onClos
 export function VodPage({ kind }: { kind: "movie" | "series" }) {
   const version = useStream((s) => s.version);
   const [cats, setCats] = useState<Category[]>([]);
-  const [cat, setCat] = useState("__all");
+  const [cat, setCat] = useState(() => useStream.getState().vodCategory ?? "__all");
+  useEffect(() => useStream.setState({ vodCategory: null }), []);
   const [sort, setSort] = useState("default");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Item[]>([]);

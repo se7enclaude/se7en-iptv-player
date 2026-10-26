@@ -67,6 +67,11 @@ export function App() {
   const streamLoaded = useStream((s) => s.loaded);
   const hasAccount = useStream((s) => !!s.state?.accounts.length);
   const theater = useStream((s) => s.theater);
+  // « Qui regarde ? » first, every launch (like Netflix), once there is a subscription
+  const [picked, setPicked] = useState(false);
+  useEffect(() => {
+    if (streamLoaded && !hasAccount) setPicked(true); // first subscription just added: straight in
+  }, [streamLoaded, hasAccount]);
   useEffect(() => {
     bootstrap();
   }, []);
@@ -146,6 +151,17 @@ export function App() {
               <span className="cursor-block" />
             </div>
           )}
+        </div>
+      );
+
+    if (hasAccount && !picked)
+      return (
+        <div className="sx-root">
+          <Ambient />
+          <div className="ip-panel ip-panel--r-3xl sx-window sx-gate">
+            <ProfilesPage gate onPicked={() => setPicked(true)} />
+          </div>
+          <Toasts />
         </div>
       );
 

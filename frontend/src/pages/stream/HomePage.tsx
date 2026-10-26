@@ -1,9 +1,9 @@
-import { ArrowDownUp, ChevronLeft, ChevronRight, Clapperboard, Ellipsis, Flame, Heart, Play, RefreshCw, Tv } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowDownUp, ChevronLeft, ChevronRight, Clapperboard, Compass, Ellipsis, Flame, Heart, Play, RefreshCw, Star, Tv } from "lucide-react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../store/app";
-import { Home, Item, stream } from "../../stream/api";
+import { Category, Home, Item, Programme, stream } from "../../stream/api";
 import { AccountForm } from "../../stream/AccountForm";
-import { Bar, Logo, PlayDisc, toggleFav } from "../../stream/components";
+import { Bar, Logo, PlayDisc, Poster, progressOf, toggleFav, useNow } from "../../stream/components";
 import { toastError, useStream } from "../../stream/store";
 import { MovieModal, SeriesModal, playEpisode } from "./VodPage";
 
@@ -100,6 +100,26 @@ function LikeCard({ it, onOpen, onPlay }: { it: Featured; onOpen: () => void; on
   );
 }
 
+/** A horizontal row of posters (films or series). */
+function Rail({ title, icon, items, kind, onOpen, onPlay, more }: { title: string; icon?: ReactNode; items: Item[]; kind: "movie" | "series"; onOpen: (it: Featured) => void; onPlay: (it: Featured) => void; more?: () => void }) {
+  if (!items.length) return null;
+  return (
+    <section>
+      <div className="sx-section-head">
+        <h2 className="sx-section-title">{icon}{title}</h2>
+        {more && <button type="button" className="ip-btn ip-btn--glass ip-btn--sm" onClick={more}>Tout voir</button>}
+      </div>
+      <div className="st-row-items sx-rail">
+        {items.map((it) => (
+          <Poster key={it.id} src={it.logo} name={it.name} progress={it.progress}
+            sub={[it.year, it.rating ? `★ ${Number(it.rating).toFixed(1)}` : null].filter(Boolean).join(" · ") || undefined}
+            onClick={() => onOpen({ ...it, kind })} onPlay={() => onPlay({ ...it, kind })} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function HomePage() {
   const version = useStream((s) => s.version);
   const play = useStream((s) => s.play);
@@ -109,6 +129,9 @@ export function HomePage() {
   const [series, setSeries] = useState<Item[]>([]);
   const [topM, setTopM] = useState<Item[]>([]);
   const [topS, setTopS] = useState<Item[]>([]);
+  const [cats, setCats] = useState<{ movie: Category[]; series: Category[] }>({ movie: [], series: [] });
+  const [onAir, setOnAir] = useState<Record<string, Programme | null>>({});
+  const clockNow = useNow(30000);
   const [idx, setIdx] = useState(0);
   const [info, setInfo] = useState<HeroInfo | null>(null);
   const [movie, setMovie] = useState<string | null>(null);
@@ -118,8 +141,13 @@ export function HomePage() {
     stream.home().then(setHome).catch(toastError);
     stream.items("movie", { category: "__recent", limit: 16 }).then((r) => setMovies(r.items)).catch(() => undefined);
     stream.items("series", { category: "__recent", limit: 16 }).then((r) => setSeries(r.items)).catch(() => undefined);
-    stream.items("movie", { sort: "rating", limit: 12 }).then((r) => setTopM(r.items)).catch(() => undefined);
-    stream.items("series", { sort: "rating", limit: 12 }).then((r) => setTopS(r.items)).catch(() => undefined);
+    stream.items("movie", { sort: "rating", limit: 30 }).then((r) => setTopM(r.items)).catch(() => undefined);
+    stream.items("series", { sort: "rating", limit: 30 }).then((r) => setTopS(r.items)).catch(() => undefined);
+    // the biggest categories, as chips to explore (adult ones stay hidden)
+    const big = (c: Category[]) => c.filter((x) => !x.adult && !x.id.startsWith("__") && (x.n ?? 0) > 0).sort((a, b) => (b.n ?? 0) - (a.n ?? 0)).slice(0, 10);
+    Promise.all([stream.categories("movie"), stream.categories("series")])
+      .then(([m, sr]) => setCats({ movie: big(m.categories), series: big(sr.categories) }))
+      .catch(() => undefined);
   }, [version]);
 
   // the hero: newest titles that have artwork, films and series in turn
@@ -195,6 +223,29 @@ export function HomePage() {
     if (await play({ type: "live", id })) setPage("live");
   };
   const channels = home?.favorites.length ? home.favorites : home?.recent ?? [];
+  // recent channels come without their programme: ask the guide for what is on now
+  const chanKey = channels.slice(0, 10).map((c) => c.id).join(",");
+  useEffect(() => {
+    let alive = true;
+    channels.slice(0, 10).forEach((c: any) => {
+      if (c.now) return;
+      stream.channelEpg(c.id).then((r) => {
+        const t = Date.now() / 1000;
+        const cur = r.programmes.find((p) => p.start <= t && t < p.stop) ?? null;
+        if (alive) setOnAir((m) => ({ ...m, [c.id]: cur }));
+      }).catch(() => undefined);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [chanKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const likeKeys = new Set(likes.map((l) => l.kind + l.id));
+  const topFilms = topM.filter((x) => !likeKeys.has("movie" + x.id) && !fkeys.has("movie" + x.id)).slice(0, 16);
+  const topSeries = topS.filter((x) => !likeKeys.has("series" + x.id) && !fkeys.has("series" + x.id)).slice(0, 16);
+  const explore = (kind: "movie" | "series", id: string) => {
+    useStream.setState({ vodCategory: id });
+    setPage(kind === "movie" ? "movies" : "series");
+  };
 
   return (
     <div className="sx-home">
@@ -269,20 +320,45 @@ export function HomePage() {
         {channels.length > 0 && (
           <section>
             <div className="sx-section-head">
-              <h2 className="sx-section-title">{home?.favorites.length ? "Tes chaînes" : "Chaînes récentes"}</h2>
+              <h2 className="sx-section-title"><Tv size={17} /> {home?.favorites.length ? "Tes chaînes en ce moment" : "En ce moment sur tes chaînes"}</h2>
               <button type="button" className="ip-btn ip-btn--glass ip-btn--sm" onClick={() => setPage("live")}>TV en direct</button>
             </div>
             <div className="sx-chan-row">
-              {channels.slice(0, 12).map((c: any) => (
-                <button key={c.id} type="button" className="st-tile" onClick={() => live(c.id)}>
-                  <Logo src={c.logo} name={c.name} size={40} />
-                  <span className="st-tile-text">
-                    <span>{c.name}</span>
-                    <span className="st-tile-now">{c.now?.title ?? "En direct"}</span>
-                  </span>
-                </button>
-              ))}
+              {channels.slice(0, 10).map((c: any) => {
+                const p: Programme | null | undefined = c.now ?? onAir[c.id];
+                return (
+                  <button key={c.id} type="button" className="st-tile sx-onair" onClick={() => live(c.id)}>
+                    <Logo src={c.logo} name={c.name} size={40} />
+                    <span className="st-tile-text">
+                      <span>{c.name}</span>
+                      <span className="st-tile-now">{p?.title ?? "En direct"}</span>
+                      {p && <Bar value={progressOf(p, clockNow)} />}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+          </section>
+        )}
+
+        <Rail title="Films ajoutés récemment" icon={<Clapperboard size={17} />} items={movies} kind="movie" onOpen={open} onPlay={playItem} more={() => setPage("movies")} />
+        <Rail title="Séries ajoutées récemment" icon={<Tv size={17} />} items={series} kind="series" onOpen={open} onPlay={playItem} more={() => setPage("series")} />
+        <Rail title="Films les mieux notés" icon={<Star size={17} />} items={topFilms} kind="movie" onOpen={open} onPlay={playItem} />
+        <Rail title="Séries les mieux notées" icon={<Star size={17} />} items={topSeries} kind="series" onOpen={open} onPlay={playItem} />
+
+        {(cats.movie.length > 0 || cats.series.length > 0) && (
+          <section className="sx-explore">
+            <div className="sx-section-head"><h2 className="sx-section-title"><Compass size={17} /> Explorer</h2></div>
+            {([["movie", "Films"], ["series", "Séries"]] as const).map(([k, label]) => cats[k].length > 0 && (
+              <div key={k} className="sx-explore-row">
+                <span className="sx-explore-label">{label}</span>
+                {cats[k].map((c) => (
+                  <button key={c.id} type="button" className="ip-chip" onClick={() => explore(k, c.id)}>
+                    {c.name}<span className="sx-explore-n">{c.n}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
           </section>
         )}
       </div>

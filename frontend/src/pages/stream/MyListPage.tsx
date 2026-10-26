@@ -71,10 +71,16 @@ export function MyListPage() {
 }
 
 /** « Qui regarde ? » */
-export function ProfilesPage() {
+/** « Qui regarde ? ». At launch (gate) it comes first, before the app : a protected profile always asks its code there,
+ * and choosing a profile opens the app on its subscription. */
+export function ProfilesPage({ gate, onPicked }: { gate?: boolean; onPicked?: () => void } = {}) {
   const state = useStream((s) => s.state);
   const setPage = useApp((s) => s.setPage);
-  const goSettings = useApp((s) => s.goSettings);
+  const goSettingsRaw = useApp((s) => s.goSettings);
+  const goSettings = (section: string) => {
+    onPicked?.();
+    goSettingsRaw(section as any);
+  };
   const toast = useApp((s) => s.toast);
   const [locked, setLocked] = useState<Profile | null>(null);
   const [pin, setPin] = useState("");
@@ -88,18 +94,20 @@ export function ProfilesPage() {
       setLocked(null);
       toast({ kind: "success", title: `Bonjour ${p.name}` });
       setPage("home");
+      onPicked?.();
     } catch (e: any) {
       if (locked) setErr(e?.message ?? "Code incorrect");
       else toastError(e);
     }
   };
   return (
-    <div className="sx-who">
+    <div className={clsx("sx-who", gate && "sx-who--gate")}>
+      {gate && <span className="eyebrow">se7en IPTV Player</span>}
       <h1>Qui regarde ?</h1>
       <div className="sx-who-list">
         {state?.profiles.map((p, i) => (
           <button key={p.id} type="button" className={clsx("ip-profile", p.id === state.profile && "is-focused")}
-            onClick={() => (p.locked && p.id !== state.profile ? (setLocked(p), setPin(""), setErr("")) : choose(p))}>
+            onClick={() => (p.locked && (gate || p.id !== state.profile) ? (setLocked(p), setPin(""), setErr("")) : choose(p))}>
             <span className="ip-profile__tile" style={{ background: `linear-gradient(160deg, ${profileColor(p.color, i)} 0%, rgba(20,22,26,.9) 130%)` }}>
               {p.kids ? <Baby size={44} strokeWidth={1.5} /> : p.name.slice(0, 1).toUpperCase()}
               {p.locked && <span className="ip-profile__lock"><Lock size={14} /></span>}
@@ -112,6 +120,22 @@ export function ProfilesPage() {
           <span className="ip-profile__name">Ajouter</span>
         </button>
       </div>
+      {gate && state && state.accounts.length > 1 && (
+        <div className="sx-who-accounts">
+          <span className="muted st-small">Abonnement</span>
+          {state.accounts.map((a) => (
+            <button key={a.id} type="button" className={clsx("ip-chip ip-chip--sm", a.id === state.account && "is-selected")}
+              onClick={async () => {
+                try {
+                  await stream.selectAccount(a.id);
+                  await useStream.getState().load();
+                } catch (e) {
+                  toastError(e);
+                }
+              }}>{a.name}</button>
+          ))}
+        </div>
+      )}
       <button type="button" className="ip-btn ip-btn--glass" onClick={() => goSettings("profiles")}><Pencil size={15} /> Gérer les profils</button>
       <Modal open={!!locked} onClose={() => setLocked(null)} eyebrow={<><Lock size={12} /> Profil protégé</>} title={`Code de « ${locked?.name} »`}
         actions={<><Button variant="ghost" onClick={() => setLocked(null)}>Annuler</Button><Button variant="primary" disabled={pin.length < 4} onClick={() => choose(locked!, pin)}>Ouvrir</Button></>}>

@@ -2,6 +2,26 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.2": {
+        "fr": ["« Qui regarde ? » au lancement : choisis ton profil (avec son code s'il est protégé), puis l'appli s'ouvre "
+               "sur ton abonnement.",
+               "Barre de progression comme sur YouTube pour les films et séries : sur toute la largeur, le temps visé "
+               "s'affiche au survol, clique où tu veux pour avancer ou reculer, et l'heure de fin s'affiche à droite. "
+               "Elle marche aussi sur les films dont le fichier ne donne pas sa durée.",
+               "Bulles plus petites et plus discrètes, sur un léger voile sombre pour rester lisibles.",
+               "Sous-titres : la liste dit clairement quand le fichier du fournisseur n'en contient aucun.",
+               "Accueil plus rempli : programme en cours sur tes chaînes, films et séries ajoutés récemment, les mieux "
+               "notés, et des catégories à explorer.",
+               "Le menu du profil ne passe plus sous le tri des films."],
+        "en": ["« Who's watching? » at launch: pick your profile (with its code if protected), then the app opens on "
+               "your subscription.",
+               "YouTube-like progress bar for films and series: full width, target time on hover, click anywhere to "
+               "seek, end time on the right; also works when the file has no duration.",
+               "Smaller, quieter bubbles over a light dark shade.",
+               "Subtitles: the list says when the provider's file has none.",
+               "Fuller home: what's on your channels now, recently added films and series, top rated, categories.",
+               "The profile menu no longer goes under the films sort selector."],
+    },
     "1.1.1": {
         "fr": ["Plein écran : la souris et le clavier marchent enfin. Bouge la souris : des bulles en verre apparaissent en "
                "bas au milieu (reculer / avancer de 10 s, pause, langue audio, sous-titres, chaîne − / +, son, quitter le "
