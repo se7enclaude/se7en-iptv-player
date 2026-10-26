@@ -114,7 +114,11 @@ def test_full_flow(api, server, tmp_path):
     catalog.save_progress(s["store"], s["session"].profile, s["session"].account, "movie", mv["id"], 600, 5400)
     api.post("/api/stream/play", headers=H, json={"type": "movie", "id": mv["id"]})
     url, item, start = api.played[-1]
-    assert f"/movie/{USER}/{PASS}/{mv['id']}." in url and start == 600
+    # le lecteur passe par le relais local (une seule connexion vers le fournisseur), qui pointe vers le bon film
+    from medialab.stream.relay import relay
+    assert url.startswith("http://127.0.0.1:") and USER not in url and PASS not in url and start == 600
+    target = relay._targets[url.split("/")[4]][0]
+    assert f"/movie/{USER}/{PASS}/{mv['id']}." in target
     api.post("/api/stream/player", headers=H, json={"cmd": "stop"})
 
     # série

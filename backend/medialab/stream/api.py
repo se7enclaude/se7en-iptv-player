@@ -19,6 +19,7 @@ from ..events import bus
 from ..logging_setup import get_logger
 from . import catalog, recorder, sync
 from .player import Player
+from .relay import relay
 from .store import Store, check_pin, hash_pin
 from .xtream import USER_AGENT, XtreamClient, account_problem, as_int, as_str, connections, normalize_server, redact
 
@@ -287,7 +288,12 @@ def register(app: FastAPI, S) -> None:
             if body.resume:
                 start_at = catalog.resume_point(store, sess.profile, aid, "episode", body.id)
         url = resolve(account, body.type, body.id)
-        player.play(url, item, start_at, account.get("user_agent") or sess.settings()["user_agent"])
+        ua = account.get("user_agent") or sess.settings()["user_agent"]
+        if body.type in ("movie", "episode") and url.startswith("http"):
+            # une seule connexion à la fois vers le fournisseur, sinon les sauts dans le film sont refusés (voir relay.py)
+            log.info("Play %s %s (relais local)", body.type, redact(url))
+            url = relay.url_for(url, ua)
+        player.play(url, item, start_at, ua)
         if player.preloaded() is None:  # la chaîne ouverte d'avance vient d'être affichée (ou il n'y en avait pas)
             conns.release(aid, "preload")
         if body.type == "live":
@@ -1060,5 +1066,5 @@ def register(app: FastAPI, S) -> None:
     threading.Thread(target=auto_refresh, name="stream-refresh", daemon=True).start()
 
     from .. import system
-    system.on_quit(lambda: (rec.shutdown(), player.shutdown(), remote.stop()))
+    system.on_quit(lambda: (rec.shutdown(), player.shutdown(), remote.stop(), relay.stop()))
     app.state.stream = {"store": store, "session": sess, "player": player, "recorder": rec, "connections": conns}

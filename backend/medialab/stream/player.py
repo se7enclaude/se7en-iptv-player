@@ -511,6 +511,7 @@ class Player:
         # les deux lecteurs (l'image est déjà là). Seulement si l'abonnement permet une connexion de plus (api.py).
         self._spare: dict | None = None
         self.fullscreen = False
+        self.last_pos = 0.0  # dernière position connue (pour reprendre au même endroit après une coupure)
         self.menu: str | None = None  # liste ouverte au-dessus des bulles : "aid" (audio) ou "sid" (sous-titres)
         self.hover: tuple[float, float] | None = None  # souris sur la vidéo, en coordonnées du bandeau (1920 × 1080)
 
@@ -732,6 +733,7 @@ class Player:
                 return
             self.item = dict(item)
             self.url = url
+            self.last_pos = float(start or 0)
             self.retries = 0
             self.stopped_by_user = False
             m.user_agent = user_agent or ""
@@ -944,6 +946,8 @@ class Player:
         st = {"playing": True, "paused": bool(g("pause", False)), "position": g("time-pos", 0), "duration": self._duration(),
               "buffering": bool(g("paused-for-cache", False)), "cached": (g("time-pos", 0) or 0) + (g("demuxer-cache-duration", 0) or 0),
               "volume": g("volume", 100), "muted": bool(g("mute", False))}
+        if st["position"]:
+            self.last_pos = float(st["position"])
         if light:
             return st
         vp = g("video-params", {}) or {}
@@ -995,10 +999,12 @@ class Player:
                 self.flash(f"Connexion perdue · nouvelle tentative ({self.retries}/6)", delay + 1)
                 log.warning("Stream ended (%s), retry %d in %.1fs: %s", name, self.retries, delay, redact(self.url))
 
+                at = self.last_pos if self.item.get("kind") in ("movie", "episode") else 0
+
                 def retry(url=self.url, item_id=(self.item or {}).get("id")):
                     time.sleep(delay)
                     if self.url == url and (self.item or {}).get("id") == item_id and not self.stopped_by_user:
-                        self.mpv.loadfile(url, "replace")
+                        self.mpv.loadfile(url, "replace", **({"start": f"{at:.1f}"} if at > 5 else {}))
                 threading.Thread(target=retry, daemon=True).start()
             else:
                 self.flash("Le flux ne répond plus.", 8)

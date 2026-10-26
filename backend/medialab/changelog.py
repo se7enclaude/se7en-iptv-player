@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.3": {
+        "fr": ["Avancer et reculer dans un film marche enfin : un clic sur la barre de progression va au bon endroit, "
+               "même chez les fournisseurs qui n'acceptent qu'une connexion à la fois.",
+               "Après une coupure, un film repart là où il en était, plus au début."],
+        "en": ["Seeking in films finally works: clicking the progress bar jumps to the right place, even with providers "
+               "that only allow one connection at a time.",
+               "After a drop, a film resumes where it was instead of from the start."],
+    },
     "1.1.2": {
         "fr": ["« Qui regarde ? » au lancement : choisis ton profil (avec son code s'il est protégé), puis l'appli s'ouvre "
                "sur ton abonnement.",
