@@ -126,7 +126,9 @@ class Relay:
         conn = resp = None
         with self._gate:
             self.abort()  # d'abord fermer, ensuite ouvrir : le fournisseur ne voit jamais deux connexions
-            for attempt in range(5):
+            # un serveur Xtream met souvent 1 à 3 s à compter l'ancienne connexion comme fermée : il refuse la nouvelle
+            # (403) en attendant. On réessaie pendant ~7 s avant d'abandonner (au lieu d'une erreur « connexion perdue »).
+            for attempt in range(8):
                 try:
                     conn, resp = _open(url, ua, rng)
                     self.opened += 1
@@ -141,7 +143,8 @@ class Relay:
                 conn = resp = None
                 if status == 404:
                     break
-                time.sleep(0.4 * (attempt + 1))  # le serveur n'a pas encore compté l'ancienne connexion comme fermée
+                time.sleep(min(1.5, 0.3 * (attempt + 1)))
+                log.info("Relais : le serveur refuse encore (%s), nouvel essai %d", status, attempt + 2)
             if resp is None:
                 log.warning("Relais : le serveur refuse le film %s", redact(url))
                 h.send_error(502)

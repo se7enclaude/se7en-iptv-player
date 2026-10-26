@@ -93,7 +93,10 @@ def test_full_flow(api, server, tmp_path):
     r = api.post("/api/stream/play", headers=H, json={"type": "live", "id": ch["id"]})
     assert r.status_code == 200, r.text
     url, item, _ = api.played[-1]
-    assert f"/live/{USER}/{PASS}/{ch['id']}." in url and item["title"] == ch["name"]
+    from medialab.stream.relay import relay
+    # par le relais local (une seule connexion, patiente si le serveur n'a pas libéré la précédente)
+    assert USER not in url and item["title"] == ch["name"]
+    assert f"/live/{USER}/{PASS}/{ch['id']}." in relay._targets[url.split("/")[4]][0]
 
     # enregistrement : refusé car l'abonnement n'a qu'une connexion et la lecture l'utilise
     rec = api.post("/api/stream/recordings", headers=H, json={"channel": ch["id"], "minutes": 1}).json()

@@ -2,6 +2,21 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.5": {
+        "fr": ["Le minuteur et l'heure de fin avancent enfin pendant le film, et la barre de progression suit.",
+               "Langues audio et sous-titres : la liste montre enfin les pistes du film (elle disait toujours « aucun "
+               "sous-titre ») et tu peux en changer.",
+               "Nouveau réglage du volume : une réglette en verre à côté du bouton du son (clic ou glisser), plus de gros "
+               "« Volume » au milieu de l'image ; barres plus jolies dans la fenêtre.",
+               "Fini les « connexion perdue · nouvelle tentative » au zapping : beaucoup de serveurs mettent 1 à 3 s à "
+               "libérer la chaîne précédente et refusaient la nouvelle ; l'appli patiente maintenant. Si le serveur "
+               "refuse vraiment (abonnement utilisé ailleurs), le message le dit."],
+        "en": ["The timer and end time finally move during the film, and the progress bar follows.",
+               "Audio languages and subtitles: the list finally shows the film's tracks and you can switch.",
+               "New volume control: a glass slider next to the sound button (click or drag); nicer bars in the window.",
+               "No more « connection lost · retry » when zapping: many servers take 1-3 s to free the previous channel "
+               "and refused the new one; the app now waits. If the server really refuses, the message says so."],
+    },
     "1.1.4": {
         "fr": ["Beaucoup plus rapide sur les gros catalogues (100 000 films) : l'accueil s'affiche en moins d'un dixième "
                "de seconde après le choix du profil, les pages Films, Séries, TV en direct et Guide s'ouvrent presque "

@@ -274,7 +274,10 @@ def register(app: FastAPI, S) -> None:
                 minutes = int(((body.stop or 0) - (body.start or 0)) / 60) + 1
                 item.update(kind="replay", subtitle=f"Replay · {body.title or ''}", start=body.start, stop=body.stop)
                 url = resolve(account, "replay", body.id, body.start, max(1, minutes))
-                player.play(url, item, 0, account.get("user_agent") or sess.settings()["user_agent"])
+                ua = account.get("user_agent") or sess.settings()["user_agent"]
+                if url.startswith("http"):
+                    url = relay.url_for(url, ua)
+                player.play(url, item, 0, ua)
                 bus.publish("player", {"event": "started", "item": item})
                 return {"item": item}
         elif body.type == "movie":
@@ -290,8 +293,10 @@ def register(app: FastAPI, S) -> None:
                 start_at = catalog.resume_point(store, sess.profile, aid, "episode", body.id)
         url = resolve(account, body.type, body.id)
         ua = account.get("user_agent") or sess.settings()["user_agent"]
-        if body.type in ("movie", "episode") and url.startswith("http"):
-            # une seule connexion à la fois vers le fournisseur, sinon les sauts dans le film sont refusés (voir relay.py)
+        # Tout passe par le relais local (voir relay.py) : une seule connexion à la fois vers le fournisseur, et quand
+        # son serveur n'a pas encore libéré la précédente (zapping, saut dans un film), il patiente au lieu d'échouer
+        # (« connexion perdue · nouvelle tentative »). Sauf la chaîne déjà ouverte d'avance (zapping instantané).
+        if url.startswith("http") and not (body.type == "live" and player.preloaded() == body.id):
             log.info("Play %s %s (relais local)", body.type, redact(url))
             url = relay.url_for(url, ua)
         player.play(url, item, start_at, ua)

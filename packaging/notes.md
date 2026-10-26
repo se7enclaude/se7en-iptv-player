@@ -1,13 +1,15 @@
-## se7en IPTV Player 1.1.4
+## se7en IPTV Player 1.1.5
 
-Plus fluide, surtout avec un gros abonnement (mesuré sur un catalogue de 100 000 films, 30 000 séries et 10 000 chaînes) :
-
-- **Lancement** : « Qui regarde ? » en 0,07 s au lieu de 0,33 s, et l'accueil rempli 0,09 s après le choix du profil
-  (au lieu de 0,41 s).
-- **Pages** : Films s'ouvre en 0,1 s au lieu de 0,4 s, le Guide TV demande 13 ms au lieu de 370 ms, une page de films
-  7 ms au lieu de 300 ms. Revenir sur une page est instantané, et Films, Séries et TV en direct sont préparés pendant
-  que tu es sur l'accueil.
-- **Recherche** : l'index est prêt dès le lancement, la première recherche ne fait plus attendre 2 à 3 s.
+- **Le minuteur avance** : la position, l'heure de fin et la barre de progression suivent enfin le film. Le lecteur
+  lisait la position au mauvais endroit (un réglage au lieu de l'état de lecture) et trouvait toujours 0:00.
+- **Langues audio et sous-titres** : même cause, la liste des pistes restait vide (« aucun sous-titre »). Elle montre
+  maintenant toutes les langues et tous les sous-titres du film, et tu peux en changer.
+- **Volume** : une réglette en verre à côté du bouton du son, au clic ou en glissant ; la molette et les flèches la
+  font bouger au lieu d'afficher un gros « Volume » au milieu de l'image. Les barres de la fenêtre sont refaites.
+- **« Connexion perdue · nouvelle tentative » au zapping** : beaucoup de serveurs mettent 1 à 3 s à libérer la chaîne
+  précédente et refusaient la nouvelle (erreur 403). Les chaînes et les replays passent maintenant par le relais
+  local, qui patiente le temps que le serveur libère la place. Si le serveur refuse vraiment (abonnement déjà utilisé
+  sur un autre appareil), le message le dit au lieu de « connexion perdue ».
 
 ## Installation
 Installe ou mets à jour depuis **Seventh OS**, ou télécharge `se7en-IPTV-Player-Setup.exe` ci-dessous.

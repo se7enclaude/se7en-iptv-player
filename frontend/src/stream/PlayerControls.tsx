@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Activity, AudioLines, Camera, Captions, CircleDot, Gauge, Maximize, Pause, Play, RectangleHorizontal, Square, Volume2, VolumeX } from "lucide-react";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Button } from "../components/ui";
 import { useApp } from "../store/app";
@@ -76,14 +76,16 @@ export function PlayerControls({ st, live, extra }: { st: PlayerState | null; li
         {seekable && (
           <div className="st-seek">
             <span className="mono">{clock(st?.position)}</span>
-            <input type="range" min={0} max={Math.max(1, st?.duration ?? 1)} step={1} value={st?.position ?? 0} onChange={(e) => cmd("seek_to", Number(e.target.value))} />
+            <input type="range" min={0} max={Math.max(1, st?.duration ?? 1)} step={1} value={st?.position ?? 0} onChange={(e) => cmd("seek_to", Number(e.target.value))}
+              style={{ "--p": `${Math.min(100, ((st?.position ?? 0) / Math.max(1, st?.duration ?? 1)) * 100)}%` } as CSSProperties} />
             <span className="mono">{clock(st?.duration)}</span>
           </div>
         )}
         {!seekable && <span className="spacer" />}
         <div className="st-vol">
           <Button iconOnly size="sm" icon={st?.muted ? <VolumeX size={16} /> : <Volume2 size={16} />} tip="Couper le son (M)" disabled={!playing} onClick={() => cmd("mute")} />
-          <input type="range" min={0} max={130} value={st?.volume ?? 100} disabled={!playing} onChange={(e) => cmd("volume", Number(e.target.value))} />
+          <input type="range" min={0} max={100} value={st?.muted ? 0 : Math.min(100, st?.volume ?? 100)} disabled={!playing} onChange={(e) => cmd("volume", Number(e.target.value))}
+            title={`Son ${Math.round(st?.volume ?? 100)} %`} style={{ "--p": `${st?.muted ? 0 : Math.min(100, st?.volume ?? 100)}%` } as CSSProperties} />
         </div>
         <Menu icon={<AudioLines size={16} />} tip="Langue" disabled={audio.length < 2}>
           {(close) => audio.map((t) => <MenuItem key={t.id} on={t.selected} onClick={() => { cmd("aid", t.id); close(); }}>{label(t)}</MenuItem>)}

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import sys
 import threading
 import time
@@ -381,6 +382,9 @@ def _pill(ev: list[str], cx: float, bottom: float, text: str, size: int = 22) ->
     ev.append(rf"{{\an5\pos({cx:.0f},{bottom - 19:.0f})\fnManrope\b1\fs{size}\1c&HFFFFFF&\bord0\shad0}}{_esc(text)}")
 
 
+VOL_W = 128  # largeur de la réglette du volume (bandeau 1920 × 1080)
+
+
 def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
     """En bas : la barre de progression sur toute la largeur (films, séries, replay ; comme YouTube : on clique où on
     veut, le temps visé s'affiche au survol), puis de petites bulles au milieu : −10 s, lecture / pause, +10 s · langue
@@ -398,12 +402,12 @@ def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
         [("fwd", "fwd", "Avancer de 10 s", small)] if not live else [],
         [("audio", "audio", "Langue audio", small), ("subs", "subs", "Sous-titres", small)],
         [("zap_up", "up", "Chaîne précédente", small), ("zap_down", "down", "Chaîne suivante", small)] if live else [],
-        [("mute", "mute", vol, small)],
+        [("mute", "mute", vol, small), ("vol", "slider", vol, -VOL_W / 2)],
         [("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)", small)],
     ]
     groups = [g for g in groups if g]
     gap, sep = 10, 22
-    width = sum(sum(2 * r for *_x, r in g) + gap * (len(g) - 1) for g in groups) + sep * (len(groups) - 1)
+    width = sum(sum(2 * abs(r) for *_x, r in g) + gap * (len(g) - 1) for g in groups) + sep * (len(groups) - 1)
     cy = H - 58
     x = (W - width) / 2
     # voile sombre en dégradé en bas, pour lire la barre et les bulles même sur une image claire
@@ -441,6 +445,21 @@ def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
         ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(tx + 5, cy, 5)}")
     for g in groups:
         for hid, icon, name, r in g:
+            if icon == "slider":  # le volume : une réglette de verre à côté de la bulle du son (clic ou glisser)
+                w = -2 * r
+                v = 0 if state.get("muted") else max(0.0, min(1.0, (state.get("volume") or 0) / 100))
+                hot = bool(hover and x - 6 <= hover[0] <= x + w + 6 and cy - 22 <= hover[1] <= cy + 22)
+                h = 8 if hot else 6
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H70&\p1}}{_rr(x - 4, cy - h / 2 - 4, w + 8, h + 8, h / 2 + 4)}")
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB0&\p1}}{_rr(x, cy - h / 2, w, h, h / 2)}")
+                if v > 0:
+                    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_rr(x, cy - h / 2, max(h, w * v), h, h / 2)}")
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_circle(x + w * v, cy, 9 if hot else 7)}")
+                hits.append({"id": "vol", "x": x, "y": cy - 22, "w": w, "h": 44})
+                if hot:
+                    tip = (x + w / 2, name)
+                x += w + gap
+                continue
             cx = x + r
             hot = bool(hover and (hover[0] - cx) ** 2 + (hover[1] - cy) ** 2 <= r * r)
             primary = hid == "pause"
@@ -619,6 +638,9 @@ class Player:
     def _mpv_log(self, level, prefix, text) -> None:
         if level in ("error", "fatal"):
             log.warning("mpv %s: %s", prefix, redact(text.strip()))
+            m = re.search(r"HTTP error (\d{3})", text)
+            if m:
+                self.last_http = (int(m.group(1)), time.monotonic())
 
     def _bind_inputs(self, m) -> None:
         """Souris et clavier sont lus par _input_loop (la fenêtre interne de mpv les avalait en plein écran) ; mpv ne
@@ -649,6 +671,7 @@ class Player:
         last_pt = (0, 0)
         down: set[int] = set()
         last_click = (0.0, 0.0, 0.0)  # moment, x, y du dernier clic sur l'image (pour le double-clic)
+        drag_vol = None  # réglette du volume attrapée (bouton gauche appuyé dessus)
         while True:
             time.sleep(0.025)
             try:
@@ -672,9 +695,16 @@ class Player:
                 pressed = bool(_u32.GetAsyncKeyState(0x01) & 0x8000)
                 if pressed and 0x01 not in down:
                     down.add(0x01)
+                    vol = next((h for h in self.hits if h["id"] == "vol"), None) if inside else None
+                    dragging = bool(vol and vol["x"] - 6 <= hx <= vol["x"] + vol["w"] + 6 and vol["y"] <= hy <= vol["y"] + vol["h"])
+                    drag_vol = vol if dragging else None
+                elif pressed and drag_vol and inside:  # on glisse sur la réglette du volume
+                    self.volume(value=round(max(0.0, min(1.0, (hx - drag_vol["x"]) / drag_vol["w"])) * 100))
                 elif not pressed and 0x01 in down:
                     down.discard(0x01)
-                    if inside:
+                    if drag_vol:
+                        drag_vol = None
+                    elif inside:
                         what = self._click_at(hx, hy)
                         now = time.monotonic()
                         if what == "video":
@@ -802,7 +832,9 @@ class Player:
             return
         v = float(self.mpv.volume or 100) + delta if value is None else value
         self.mpv.volume = max(0, min(150, v))
-        self.flash(f"Volume {int(self.mpv.volume)} %")
+        if self.mpv.mute and v > 0:
+            self.mpv.mute = False
+        self.show_osd(2.5)  # la réglette du bandeau montre le niveau (plus de gros « Volume 80 % » au milieu)
 
     def toggle_mute(self) -> None:
         if self.mpv is not None:
@@ -816,7 +848,7 @@ class Player:
                    "audio-delay", "af", "hwdec", "volume", "mute", "ontop"}
         if prop not in allowed:
             raise MediaLabError("invalid", "Réglage du lecteur inconnu.")
-        self.mpv[prop] = value
+        setattr(self.mpv, prop.replace("-", "_"), value)
 
     def add_subtitle(self, path: str) -> None:
         if self.mpv is not None:
@@ -882,6 +914,8 @@ class Player:
                     self.toggle_mute()
                 elif hid in ("back", "fwd"):
                     self.seek(-10 if hid == "back" else 10)
+                elif hid == "vol":
+                    self.volume(value=round(max(0.0, min(1.0, (x - h["x"]) / h["w"])) * 100))
                 elif hid == "seek" and self._duration() > 0:
                     self.seek(max(0.0, min(1.0, (x - h["x"]) / h["w"])) * self._duration(), absolute=True)
                 elif hid == "exit_fs":
@@ -938,8 +972,10 @@ class Player:
             return {"playing": False}
 
         def g(name: str, default: Any = None) -> Any:
+            # propriété de lecture (m.time_pos) : m["time-pos"] lit un *réglage* de mpv, vide pour la position, les
+            # pistes, le tampon… (c'est pour ça que le minuteur restait à 0:00 et les sous-titres « aucun »)
             try:
-                v = m[name]
+                v = getattr(m, name.replace("-", "_"))
                 return default if v is None else v
             except Exception:  # noqa: BLE001
                 return default
@@ -996,7 +1032,13 @@ class Player:
             if self.retries < 6:
                 self.retries += 1
                 delay = min(8, 1.5 * self.retries)
-                self.flash(f"Connexion perdue · nouvelle tentative ({self.retries}/6)", delay + 1)
+                code, when = getattr(self, "last_http", (0, 0.0))
+                if code and time.monotonic() - when < 30:
+                    why = ("Le serveur refuse la connexion (abonnement déjà utilisé ailleurs ?)" if code in (401, 403, 429, 458, 509)
+                           else f"Le serveur ne répond pas ({code})")
+                else:
+                    why = "Le flux s'est coupé"
+                self.flash(f"{why} · nouvel essai ({self.retries}/6)", delay + 1)
                 log.warning("Stream ended (%s), retry %d in %.1fs: %s", name, self.retries, delay, redact(self.url))
 
                 at = self.last_pos if self.item.get("kind") in ("movie", "episode") else 0
