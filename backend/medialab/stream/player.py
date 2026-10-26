@@ -79,6 +79,14 @@ if _u32:
     _u32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
     _u32.SetForegroundWindow.argtypes = [wintypes.HWND]
     _u32.SetFocus.argtypes = [wintypes.HWND]
+    _u32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+    _u32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+    _u32.GetAsyncKeyState.restype = ctypes.c_short
+    _u32.GetForegroundWindow.restype = wintypes.HWND
+    _u32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+    _u32.GetAncestor.restype = wintypes.HWND
+    _u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    _u32.IsWindowVisible.argtypes = [wintypes.HWND]
     _k32.GetModuleHandleW.restype = wintypes.HMODULE
     _g32.GetStockObject.restype = wintypes.HGDIOBJ
     _g32.CreateRoundRectRgn.restype = wintypes.HANDLE
@@ -272,49 +280,183 @@ def osd(state: dict, W: int = 1920, H: int = 1080) -> tuple[str, list[dict]]:
         nxt = state.get("next")
         if nxt and nxt.get("start"):
             ev.append(rf"{{\an7\pos({W - bw - 30},118)\fnManrope\fs24\1c&HE0E0E0&\bord0\shad0}}Ensuite {_hm(nxt['start'])}  {_esc(nxt.get('title') or '')[:34]}")
-    # ---- barre du bas (pause, progression, temps, volume)
+    # ---- barre du bas : des bulles en verre liquide, au milieu
     if state.get("controls"):
-        bx, by, bw, bh = 48, H - 160, W - 96, 112
-        ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(bx, by, bw, bh, 56)}")
-        ev.append(rf"{{\an7\pos(0,0){edge}\p1}}{_rr(bx, by, bw, bh, 56)}")
-        paused = state.get("paused")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_rr(bx + 24, by + 26, 160, 60, 30)}")
-        ev.append(rf"{{\an5\pos({bx + 104},{by + 56})\fnManrope\b1\fs30\1c&H0E0D0B&\bord0\shad0}}{'Lecture' if paused else 'Pause'}")
-        hits.append({"id": "pause", "x": bx + 24, "y": by + 26, "w": 160, "h": 60})
-        dur, pos = state.get("duration") or 0, state.get("position") or 0
-        px, pw = bx + 214, bw - 214 - 300
-        if dur > 0 and not live:
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB0&\p1}}{_rr(px, by + 50, pw, 12, 6)}")
-            cache = state.get("cached") or 0
-            if cache > pos:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H90&\p1}}{_rr(px, by + 50, max(12, pw * min(1, cache / dur)), 12, 6)}")
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HB2B9F1&\1a&H00&\p1}}{_rr(px, by + 50, max(12, pw * min(1, pos / dur)), 12, 6)}")
-            hits.append({"id": "seek", "x": px, "y": by + 30, "w": pw, "h": 52})
-            label = f"{_clock(pos)} / {_clock(dur)}"
-        else:
-            ev.append(rf"{{\an4\pos({px},{by + 56})\fnManrope\b1\fs28\1c&HFFFFFF&\bord0\shad0}}{'Mise en mémoire…' if state.get('buffering') else 'En direct'}")
-            label = time.strftime("%H:%M")
-        ev.append(rf"{{\an6\pos({bx + bw - 140},{by + 56})\fnManrope\b1\fs30\1c&HFFFFFF&\bord0\shad0}}{label}")
-        vol = "Muet" if state.get("muted") else f"{int(state.get('volume') or 0)} %"
-        ev.append(rf"{{\an6\pos({bx + bw - 34},{by + 56})\fnManrope\fs26\1c&HDDDDDD&\bord0\shad0}}{vol}")
-        hits.append({"id": "mute", "x": bx + bw - 130, "y": by + 26, "w": 110, "h": 60})
-        if state.get("fullscreen"):  # plein écran : toujours une sortie visible, et le zapping à la souris
-            ex, ey, ew, eh = bx + bw - 430, by - 84, 430, 64
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_rr(ex, ey, ew, eh, 32)}")
-            ev.append(rf"{{\an5\pos({ex + ew // 2},{ey + eh // 2})\fnManrope\b1\fs28\1c&H0E0D0B&\bord0\shad0}}Quitter le plein écran (Échap)")
-            hits.append({"id": "exit_fs", "x": ex, "y": ey, "w": ew, "h": eh})
-            if live:
-                for k, (hid, label) in enumerate((("zap_up", "Chaîne −"), ("zap_down", "Chaîne +"))):
-                    zx = bx + k * 220
-                    ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(zx, by - 84, 200, 64, 32)}")
-                    ev.append(rf"{{\an5\pos({zx + 100},{by - 52})\fnManrope\b1\fs28\1c&HFFFFFF&\bord0\shad0}}{label}")
-                    hits.append({"id": hid, "x": zx, "y": by - 84, "w": 200, "h": 64})
+        hits += _bubbles(ev, state, W, H)
     # ---- messages (volume, erreur, reconnexion)
     msg = state.get("message")
     if msg:
         ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(W / 2 - 360, H / 2 - 50, 720, 100, 50)}")
         ev.append(rf"{{\an5\pos({W // 2},{H // 2})\fnManrope\b1\fs34\1c&HFFFFFF&\bord0\shad0}}{_esc(msg)}")
     return "\n".join(ev), hits
+
+
+# ------------------------------------------------------------------ bulles (verre liquide)
+LANGS = {"fre": "Français", "fra": "Français", "fr": "Français", "eng": "Anglais", "en": "Anglais", "ara": "Arabe",
+         "ar": "Arabe", "spa": "Espagnol", "es": "Espagnol", "ger": "Allemand", "deu": "Allemand", "de": "Allemand",
+         "ita": "Italien", "it": "Italien", "por": "Portugais", "pt": "Portugais", "tur": "Turc", "tr": "Turc",
+         "dut": "Néerlandais", "nld": "Néerlandais", "nl": "Néerlandais", "pol": "Polonais", "rus": "Russe", "jpn": "Japonais"}
+
+
+def track_label(t: dict, n: int) -> str:
+    name = LANGS.get((t.get("lang") or "").lower(), (t.get("lang") or "").upper())
+    title = (t.get("title") or "").strip()
+    if title and title.lower() not in name.lower():
+        name = f"{name} · {title}" if name else title
+    return _esc(name or f"Piste {n}")[:40]
+
+
+def _circle(cx: float, cy: float, r: float) -> str:
+    return _rr(cx - r, cy - r, 2 * r, 2 * r, r)
+
+
+def _glass(ev: list[str], cx: float, cy: float, r: float, hot: bool = False, solid: bool = False) -> None:
+    """Une bulle de verre : fond sombre translucide, voile blanc, reflet en haut et liseré clair."""
+    if solid:
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HF4F2F0&\1a&H00&\p1}}{_circle(cx, cy, r)}")
+        return
+    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H{'50' if hot else '78'}&\p1}}{_circle(cx, cy, r)}")
+    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'B8' if hot else 'D8'}&\p1}}{_circle(cx, cy, r)}")
+    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HD0&\p1}}{_rr(cx - r * 0.62, cy - r * 0.86, r * 1.24, r * 0.62, r * 0.31)}")
+    ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&H{'60' if hot else '98'}&\1a&HFF&\p1}}{_circle(cx, cy, r)}")
+
+
+def _icon(ev: list[str], kind: str, cx: float, cy: float, dark: bool = False, state: dict | None = None) -> None:
+    col = r"\1c&H100D0B&" if dark else r"\1c&HFFFFFF&"
+    pre = rf"{{\an7\pos(0,0)\bord0\shad0{col}\1a&H00&\p1}}"
+
+    def shape(d: str) -> None:
+        ev.append(pre + d)
+
+    def text(t: str, size: int = 26) -> None:
+        ev.append(rf"{{\an5\pos({cx:.0f},{cy:.0f})\fnManrope\b1\fs{size}{col}\bord0\shad0}}{t}")
+
+    x, y = cx, cy
+    if kind == "play":
+        shape(f"m {x - 9:.0f} {y - 15:.0f} l {x + 16:.0f} {y:.0f} l {x - 9:.0f} {y + 15:.0f}")
+    elif kind == "pause":
+        shape(_rr(x - 12, y - 14, 8, 28, 3))
+        shape(_rr(x + 4, y - 14, 8, 28, 3))
+    elif kind in ("back", "fwd"):
+        text("−10" if kind == "back" else "+10", 24)
+    elif kind == "subs":
+        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\1a&HFF&\p1}}{_rr(x - 19, y - 13, 38, 26, 6)}")
+        ev.append(rf"{{\an5\pos({x:.0f},{y + 1:.0f})\fnManrope\b1\fs17{col}\bord0\shad0}}CC")
+    elif kind == "audio":
+        for k, h in enumerate((10, 22, 30, 18, 8)):
+            shape(_rr(x - 17 + k * 7.5, y - h / 2, 4.5, h, 2.2))
+    elif kind in ("up", "down"):
+        d = -1 if kind == "up" else 1
+        shape(f"m {x - 13:.0f} {y - 6 * d:.0f} l {x + 13:.0f} {y - 6 * d:.0f} l {x:.0f} {y + 8 * d:.0f}")
+    elif kind == "mute":
+        shape(f"m {x - 16:.0f} {y - 6:.0f} l {x - 8:.0f} {y - 6:.0f} l {x + 2:.0f} {y - 15:.0f} l {x + 2:.0f} {y + 15:.0f} "
+              f"l {x - 8:.0f} {y + 6:.0f} l {x - 16:.0f} {y + 6:.0f}")
+        if (state or {}).get("muted"):
+            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H5A5AF0&\1a&H00&\p1}}m {x + 6:.0f} {y - 9:.0f} l {x + 9:.0f} {y - 12:.0f} "
+                      f"l {x + 19:.0f} {y - 2:.0f} l {x + 16:.0f} {y + 1:.0f}")
+        else:
+            shape(_rr(x + 7, y - 5, 4, 10, 2))
+            shape(_rr(x + 14, y - 10, 4, 20, 2))
+    elif kind in ("fs_on", "fs_off"):
+        # quatre coins : vers l'extérieur pour entrer en plein écran, vers le centre pour en sortir
+        out = kind == "fs_on"
+        a, b, arm, t = (15, 12, 9, 4) if out else (6, 5, 9, 4)
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                px, py = x + sx * a, y + sy * b
+                dx, dy = (-sx, -sy) if out else (sx, sy)  # sens des branches depuis le coin
+                shape(_rr(min(px, px + dx * arm) - t / 2, py - t / 2, arm + t, t, 1.5))
+                shape(_rr(px - t / 2, min(py, py + dy * arm) - t / 2, t, arm + t, 1.5))
+
+def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
+    """Bulles en bas au milieu : −10 s, lecture / pause, +10 s · langue audio, sous-titres · chaîne − / + (direct) ·
+    son · plein écran. Le nom de la bulle survolée s'affiche au-dessus ; audio et sous-titres ouvrent une petite liste."""
+    hits: list[dict] = []
+    live = state.get("kind") == "live"
+    paused = bool(state.get("paused"))
+    full = bool(state.get("fullscreen"))
+    hover = state.get("hover")
+    vol = "Son coupé" if state.get("muted") else f"Son {int(state.get('volume') or 0)} %"
+    groups = [
+        [("back", "back", "Reculer de 10 s", 34)] if not live else [],
+        [("pause", "play" if paused else "pause", "Lecture" if paused else "Pause", 44)],
+        [("fwd", "fwd", "Avancer de 10 s", 34)] if not live else [],
+        [("audio", "audio", "Langue audio", 34), ("subs", "subs", "Sous-titres", 34)],
+        [("zap_up", "up", "Chaîne précédente", 34), ("zap_down", "down", "Chaîne suivante", 34)] if live else [],
+        [("mute", "mute", vol, 34)],
+        [("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)", 34)],
+    ]
+    groups = [g for g in groups if g]
+    gap, sep = 16, 34
+    width = sum(sum(2 * r for *_x, r in g) + gap * (len(g) - 1) for g in groups) + sep * (len(groups) - 1)
+    cy = H - 96
+    x = (W - width) / 2
+    # la piste : progression (films, séries, replay) ou « En direct », juste au-dessus des bulles
+    dur, pos = state.get("duration") or 0, state.get("position") or 0
+    tw, ty = min(1100, max(width + 120, 760)), cy - 84
+    tx = (W - tw) / 2
+    if dur > 0 and not live:
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB8&\p1}}{_rr(tx, ty, tw, 8, 4)}")
+        cache = state.get("cached") or 0
+        if cache > pos:
+            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H98&\p1}}{_rr(tx, ty, max(8, tw * min(1, cache / dur)), 8, 4)}")
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_rr(tx, ty, max(8, tw * min(1, pos / dur)), 8, 4)}")
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_circle(tx + tw * min(1, pos / dur), ty + 4, 9)}")
+        ev.append(rf"{{\an6\pos({tx - 18:.0f},{ty + 4:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{_clock(pos)}")
+        ev.append(rf"{{\an4\pos({tx + tw + 18:.0f},{ty + 4:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{_clock(dur)}")
+        hits.append({"id": "seek", "x": tx, "y": ty - 16, "w": tw, "h": 40})
+    else:
+        txt = "Mise en mémoire…" if state.get("buffering") else f"En direct · {time.strftime('%H:%M')}"
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H10&\p1}}{_rr(W / 2 - 110, ty - 16, 220, 38, 19)}")
+        ev.append(rf"{{\an5\pos({W // 2},{ty + 3:.0f})\fnManrope\b1\fs22\1c&HFFFFFF&\bord0\shad0}}{txt}")
+    label = None
+    for g in groups:
+        for hid, icon, name, r in g:
+            cx = x + r
+            hot = bool(hover and (hover[0] - cx) ** 2 + (hover[1] - cy) ** 2 <= r * r)
+            primary = hid == "pause"
+            _glass(ev, cx, cy, r, hot, solid=primary)
+            _icon(ev, icon, cx, cy, dark=primary, state=state)
+            hits.append({"id": hid, "x": cx - r, "y": cy - r, "w": 2 * r, "h": 2 * r})
+            if hot:  # au-dessus de la piste (progression / « En direct »), pour ne rien cacher
+                label = (cx, ty - 22, name)
+            x += 2 * r + gap
+        x += sep - gap
+    # le nom de la bulle survolée, dans une petite pastille de verre
+    if label and not state.get("menu"):
+        lx, ly, name = label
+        lw = 30 + 14 * len(name)
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H40&\p1}}{_rr(lx - lw / 2, ly - 46, lw, 44, 22)}")
+        ev.append(rf"{{\an5\pos({lx:.0f},{ly - 24:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad0}}{_esc(name)}")
+    # liste des pistes (audio ou sous-titres) au-dessus de sa bulle
+    menu = state.get("menu")
+    if menu in ("aid", "sid"):
+        kind = "audio" if menu == "aid" else "sub"
+        tracks = [t for t in state.get("tracks") or [] if t.get("type") == kind]
+        rows = ([{"id": "no", "label": "Désactivés", "selected": not any(t.get("selected") for t in tracks)}] if menu == "sid" else []) + [
+            {"id": str(t.get("id")), "label": track_label(t, n + 1), "selected": bool(t.get("selected"))} for n, t in enumerate(tracks)]
+        if not rows:
+            rows = [{"id": "", "label": "Aucune piste", "selected": False}]
+        anchor = next(h for h in hits if h["id"] == ("audio" if menu == "aid" else "subs"))
+        mw, rh = 380, 56
+        mh = 20 + rh * len(rows) + 44
+        mx, my = anchor["x"] + anchor["w"] / 2 - mw / 2, anchor["y"] - 24 - mh
+        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H30&\p1}}{_rr(mx, my, mw, mh, 26)}")
+        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&HA8&\1a&HFF&\p1}}{_rr(mx, my, mw, mh, 26)}")
+        ev.append(rf"{{\an7\pos({mx + 24:.0f},{my + 16:.0f})\fnManrope\b1\fs22\1c&HB8B8B8&\bord0\shad0}}{'Langue audio' if menu == 'aid' else 'Sous-titres'}")
+        for k, row in enumerate(rows):
+            ry = my + 52 + k * rh
+            hot = bool(hover and mx <= hover[0] <= mx + mw and ry <= hover[1] <= ry + rh)
+            if row["selected"] or hot:
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'D0' if not row['selected'] else 'B0'}&\p1}}{_rr(mx + 10, ry + 4, mw - 20, rh - 8, 20)}")
+            ev.append(rf"{{\an4\pos({mx + 30:.0f},{ry + rh / 2:.0f})\fnManrope\b{1 if row['selected'] else 0}\fs26\1c&HFFFFFF&\bord0\shad0}}{row['label']}")
+            if row["selected"]:
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(mx + mw - 36, ry + rh / 2, 7)}")
+            if row["id"]:
+                hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": mx, "y": ry, "w": mw, "h": rh})
+        # après les pistes (elles passent d'abord), avant les bulles : un clic dans la liste hors piste ne fait rien
+        hits.insert(sum(1 for h in hits if h["id"].startswith("track:")), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
+    return hits
 
 
 # ------------------------------------------------------------------ lecteur
@@ -340,6 +482,8 @@ class Player:
         # les deux lecteurs (l'image est déjà là). Seulement si l'abonnement permet une connexion de plus (api.py).
         self._spare: dict | None = None
         self.fullscreen = False
+        self.menu: str | None = None  # liste ouverte au-dessus des bulles : "aid" (audio) ou "sid" (sous-titres)
+        self.hover: tuple[float, float] | None = None  # souris sur la vidéo, en coordonnées du bandeau (1920 × 1080)
 
     # ---------------------------------------------------------------- création
     def _ensure(self):
@@ -350,6 +494,7 @@ class Player:
         self.mpv = self._create(self.host)
         self._osd_thread = threading.Thread(target=self._osd_loop, name="player-osd", daemon=True)
         self._osd_thread.start()
+        threading.Thread(target=self._input_loop, name="player-input", daemon=True).start()
         self._apply_rect()
         log.info("Player ready (libmpv in %s, %s)", mpv_dir(), "child window" if self.host.child else "own window")
         return self.mpv
@@ -446,28 +591,105 @@ class Player:
             log.warning("mpv %s: %s", prefix, redact(text.strip()))
 
     def _bind_inputs(self, m) -> None:
+        """Souris et clavier sont lus par _input_loop (la fenêtre interne de mpv les avalait en plein écran) ; mpv ne
+        garde que la molette pour le volume."""
         def on(key: str, fn: Callable[[], None]) -> None:
             m.register_key_binding(key, lambda state, name, char: state[0] in "dp" and fn())
 
-        on("MOUSE_MOVE", self.show_osd)
-        on("MBTN_LEFT", self._click)
-        on("MBTN_LEFT_DBL", lambda: self.on_action("fullscreen", {}))
         on("WHEEL_UP", lambda: self.volume(delta=5))
         on("WHEEL_DOWN", lambda: self.volume(delta=-5))
-        on("SPACE", self.toggle_pause)
-        on("f", lambda: self.on_action("fullscreen", {}))
-        on("ESC", lambda: self.on_action("exit_fullscreen", {}))
-        on("m", self.toggle_mute)
-        on("UP", lambda: self.on_action("zap", {"delta": -1}))
-        on("DOWN", lambda: self.on_action("zap", {"delta": 1}))
-        on("PGUP", lambda: self.on_action("zap", {"delta": -1}))
-        on("PGDWN", lambda: self.on_action("zap", {"delta": 1}))
-        on("LEFT", lambda: self.seek(-10))
-        on("RIGHT", lambda: self.seek(10))
-        on("BS", lambda: self.on_action("previous_channel", {}))
-        on("i", lambda: self.show_osd(6))
-        for d in "0123456789":
-            on(d, lambda d=d: self.on_action("digit", {"digit": d}))
+
+    # ---------------------------------------------------------------- souris et clavier
+    KEYS = {0x1B: "esc", 0x46: "f", 0x20: "space", 0x25: "left", 0x27: "right", 0x26: "up", 0x28: "down", 0x4D: "m",
+            0x08: "back", 0x49: "i", 0x21: "up", 0x22: "down", **{0x30 + d: str(d) for d in range(10)},
+            **{0x60 + d: str(d) for d in range(10)}}
+
+    def _video_rect(self) -> tuple[int, int, int, int] | None:
+        h = self.host.hwnd if self.host else None
+        if not h or not _u32.IsWindowVisible(h):
+            return None
+        r = wintypes.RECT()
+        _u32.GetWindowRect(h, ctypes.byref(r))
+        return (r.left, r.top, r.right - r.left, r.bottom - r.top) if r.right - r.left > 20 else None
+
+    def _input_loop(self) -> None:
+        """Toutes les 25 ms : où est la souris sur la vidéo (bandeau, bulle survolée), clics et double-clic ; en plein
+        écran aussi le clavier (Échap / F, espace, flèches, chiffres…)."""
+        pt = wintypes.POINT()
+        last_pt = (0, 0)
+        down: set[int] = set()
+        last_click = (0.0, 0.0, 0.0)  # moment, x, y du dernier clic sur l'image (pour le double-clic)
+        while True:
+            time.sleep(0.025)
+            try:
+                if self.mpv is None or self.host is None or not self.item:
+                    self.hover = None
+                    continue
+                rect = self._video_rect()
+                fg = _u32.GetAncestor(_u32.GetForegroundWindow(), 2)  # GA_ROOT
+                ours = fg and (fg == self.host.hwnd or fg == self.host.parent)
+                _u32.GetCursorPos(ctypes.byref(pt))
+                inside = bool(rect and ours and rect[0] <= pt.x < rect[0] + rect[2] and rect[1] <= pt.y < rect[1] + rect[3])
+                if inside:
+                    hx, hy = (pt.x - rect[0]) * 1920 / rect[2], (pt.y - rect[1]) * 1080 / rect[3]
+                    if (pt.x, pt.y) != last_pt:
+                        self.show_osd(3)
+                        self.hover = (hx, hy)
+                    last_pt = (pt.x, pt.y)
+                else:
+                    self.hover = None
+                # clic gauche : à l'image près, au relâchement
+                pressed = bool(_u32.GetAsyncKeyState(0x01) & 0x8000)
+                if pressed and 0x01 not in down:
+                    down.add(0x01)
+                elif not pressed and 0x01 in down:
+                    down.discard(0x01)
+                    if inside:
+                        what = self._click_at(hx, hy)
+                        now = time.monotonic()
+                        if what == "video":
+                            if now - last_click[0] < 0.35 and abs(hx - last_click[1]) < 40 and abs(hy - last_click[2]) < 40:
+                                self.on_action("fullscreen", {})
+                                last_click = (0.0, 0.0, 0.0)
+                            else:
+                                last_click = (now, hx, hy)
+                # clavier : en plein écran seulement (dans la page, c'est l'interface qui a le clavier)
+                if not (self.fullscreen and fg == self.host.hwnd):
+                    down &= {0x01}
+                    continue
+                for vk, key in self.KEYS.items():
+                    p = bool(_u32.GetAsyncKeyState(vk) & 0x8000)
+                    if p and vk not in down:
+                        down.add(vk)
+                        self._key(key)
+                    elif not p:
+                        down.discard(vk)
+            except Exception as e:  # noqa: BLE001 - le lecteur a pu être fermé
+                log.debug("input: %s", e)
+
+    def _key(self, key: str) -> None:
+        if key in ("esc", "f"):
+            if self.menu:
+                self.menu = None
+            else:
+                self.on_action("exit_fullscreen", {})
+        elif key == "space":
+            self.toggle_pause()
+        elif key in ("up", "down"):
+            if self.item and self.item.get("kind") == "live":
+                self.on_action("zap", {"delta": -1 if key == "up" else 1})
+            else:
+                self.volume(delta=5 if key == "up" else -5)
+        elif key in ("left", "right"):
+            self.seek(-10 if key == "left" else 10)
+        elif key == "m":
+            self.toggle_mute()
+        elif key == "back":
+            self.on_action("previous_channel", {})
+        elif key == "i":
+            self.show_osd(6)
+        elif key.isdigit():
+            self.on_action("digit", {"digit": key})
 
     # ---------------------------------------------------------------- lecture
     def play(self, url: str, item: dict, start: float = 0.0, user_agent: str = "") -> None:
@@ -585,35 +807,55 @@ class Player:
         if self.item is not None:
             self.item.update(values)
 
-    def _click(self) -> None:
+    def _click_at(self, x: float, y: float) -> str:
+        """Clic aux coordonnées du bandeau (1920 × 1080). Renvoie « video » si ce n'était sur aucun bouton."""
         self.show_osd()
-        try:
-            mx, my = self.mpv.mouse_pos["x"], self.mpv.mouse_pos["y"]
-            ow, oh = self.mpv.osd_width or 1, self.mpv.osd_height or 1
-        except Exception:  # noqa: BLE001
-            return
-        x, y = mx * 1920 / ow, my * 1080 / oh
-        for h in self.hits:
-            if h["x"] <= x <= h["x"] + h["w"] and h["y"] <= y <= h["y"] + h["h"]:
-                if h["id"] == "pause":
+        for h in list(self.hits):
+            if not (h["x"] <= x <= h["x"] + h["w"] and h["y"] <= y <= h["y"] + h["h"]):
+                continue
+            hid = h["id"]
+            if hid.startswith("track:"):
+                _t, prop, val = hid.split(":", 2)
+                try:
+                    self.set(prop, "no" if val == "no" else int(val))
+                except Exception:  # noqa: BLE001
+                    pass
+                self.menu = None
+            elif hid == "menu_area":
+                pass
+            elif hid in ("audio", "subs"):
+                want = "aid" if hid == "audio" else "sid"
+                self.menu = None if self.menu == want else want
+            else:
+                self.menu = None
+                if hid == "pause":
                     self.toggle_pause()
-                elif h["id"] == "mute":
+                elif hid == "mute":
                     self.toggle_mute()
-                elif h["id"] == "seek" and self.mpv.duration:
-                    self.seek((x - h["x"]) / h["w"] * self.mpv.duration, absolute=True)
-                elif h["id"] == "exit_fs":
+                elif hid in ("back", "fwd"):
+                    self.seek(-10 if hid == "back" else 10)
+                elif hid == "seek" and self.mpv.duration:
+                    self.seek(max(0.0, min(1.0, (x - h["x"]) / h["w"])) * self.mpv.duration, absolute=True)
+                elif hid == "exit_fs":
                     self.on_action("exit_fullscreen", {})
-                elif h["id"] in ("zap_up", "zap_down"):
-                    self.on_action("zap", {"delta": -1 if h["id"] == "zap_up" else 1})
-                return
+                elif hid == "fs":
+                    self.on_action("fullscreen", {})
+                elif hid in ("zap_up", "zap_down"):
+                    self.on_action("zap", {"delta": -1 if hid == "zap_up" else 1})
+            return hid
+        if self.menu:
+            self.menu = None
+            return "menu"
         self.on_action("click", {})
+        return "video"
 
     def _osd_loop(self) -> None:
         last = None
         last_m = None
         tick = 0
+        saved = time.monotonic()
         while True:
-            time.sleep(0.25)
+            time.sleep(0.05 if self.hover or self.menu else 0.25)  # réactif quand la souris est sur la vidéo
             tick += 1
             m = self.mpv
             if m is None:
@@ -621,19 +863,22 @@ class Player:
             if m is not last_m:  # zapping instantané : l'autre lecteur est passé devant
                 last, last_m = None, m
             try:
-                st = self.snapshot(light=True)
-                visible = bool(self.item) and (time.monotonic() < self.osd_until or st.get("paused") or st.get("buffering"))
+                st = self.snapshot(light=not self.menu)
+                visible = bool(self.item) and (time.monotonic() < self.osd_until or st.get("paused") or st.get("buffering")
+                                               or self.menu is not None)
                 if self.message and time.monotonic() > self.message[1]:
                     self.message = None
                 if visible:
                     data, self.hits = osd({**(self.item or {}), **st, "controls": True, "fullscreen": self.fullscreen,
+                                           "hover": self.hover, "menu": self.menu,
                                            "message": self.message[0] if self.message else None})
                 else:
                     data, self.hits = "", []
                 if data != last:
                     m.command("osd-overlay", 1, "ass-events", data or " ", 1920, 1080, 0, "no", "no")
                     last = data
-                if tick % 40 == 0 and self.item:  # toutes les 10 s : position de reprise
+                if self.item and time.monotonic() - saved > 10:  # toutes les 10 s : position de reprise
+                    saved = time.monotonic()
                     self._save_progress()
             except Exception as e:  # noqa: BLE001 - le lecteur a pu être fermé
                 log.debug("osd: %s", e)

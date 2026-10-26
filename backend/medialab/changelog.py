@@ -2,6 +2,20 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.1": {
+        "fr": ["Plein écran : la souris et le clavier marchent enfin. Bouge la souris : des bulles en verre apparaissent en "
+               "bas au milieu (reculer / avancer de 10 s, pause, langue audio, sous-titres, chaîne − / +, son, quitter le "
+               "plein écran). Double-clic ou Échap pour sortir.",
+               "Le catalogue n'est plus rechargé à chaque lancement : seulement s'il a plus de 12 h ; le guide se recharge "
+               "tout seul avant d'arriver à sa fin.",
+               "Les infobulles « Marquer comme vu » des épisodes ne sont plus coupées."],
+        "en": ["Full screen: mouse and keyboard finally work. Move the mouse: glass bubbles appear at the bottom (back / "
+               "forward 10 s, pause, audio language, subtitles, channel − / +, sound, exit full screen). Double-click or "
+               "Esc to leave.",
+               "The catalogue is no longer reloaded at every launch: only when older than 12 h; the guide reloads before "
+               "it runs out.",
+               "Episode « Mark as watched » tooltips are no longer cut."],
+    },
     "1.1.0": {
         "fr": ["Nouveau plein écran : la vidéo prend tout l'écran, avec un bouton « Quitter le plein écran » (ou Échap), "
                "Chaîne − / Chaîne + et le bandeau du programme. Image plus fluide (chaînes entrelacées désentrelacées, "

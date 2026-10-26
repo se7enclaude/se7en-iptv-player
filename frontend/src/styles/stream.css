@@ -503,3 +503,6 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 .st-remote { display: flex; gap: 20px; align-items: flex-start; padding: 16px; margin: 4px 0 12px; border-radius: var(--radius-lg); background: var(--white-a06); }
 .st-qr { flex: none; border-radius: 12px; }
 .st-remote-url { display: block; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, .35); font: 12.5px/1.4 var(--font-mono, ui-monospace, monospace); word-break: break-all; user-select: all; }
+/* épisodes : le bouton « vu » est collé au bord droit de la fiche, son infobulle s'ouvre à sa gauche */
+.st-ep [data-tip]:hover::after { left: auto; right: calc(100% + 10px); bottom: auto; top: 50%; transform: translateY(-50%); animation-name: tipInLeft; }
+@keyframes tipInLeft { from { opacity: 0; transform: translate(4px, -50%); } }

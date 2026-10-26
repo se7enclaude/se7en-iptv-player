@@ -411,3 +411,57 @@ def test_preload_gives_way_and_swaps():
     # une autre chaîne : chargement normal, sans échange
     p.play("http://s/live/u/p/6.ts", {"kind": "live", "id": "6"})
     assert p.mpv is spare_m and ("loadfile", "http://s/live/u/p/6.ts", "replace") in spare_m.cmds
+
+
+def test_fullscreen_bubbles_and_menus():
+    """Les bulles du bandeau : chaque clic fait ce qui est écrit, la liste des sous-titres choisit une piste."""
+    from medialab.stream import player as P
+
+    class M(dict):
+        __getattr__ = dict.get
+        duration = 6000.0
+
+        def __setattr__(self, k, v):
+            self[k] = v
+
+        def seek(self, *a):
+            self.setdefault("seeks", []).append(a)
+
+        def __setitem__(self, k, v):
+            dict.__setitem__(self, k, v)
+
+    p = P.Player("t", lambda: {})
+    p.mpv = M(pause=False, mute=False, volume=100)
+    p.item = {"kind": "movie", "id": "1", "title": "Film"}
+    p.fullscreen = True
+    actions = []
+    p.on_action = lambda a, d: actions.append((a, d))
+    tracks = [{"id": 1, "type": "sub", "lang": "fre", "selected": True}, {"id": 2, "type": "sub", "lang": "eng"}]
+
+    def draw(**extra):
+        _, p.hits = P.osd({**p.item, "controls": True, "fullscreen": True, "duration": 6000, "position": 60, "tracks": tracks,
+                           "menu": p.menu, **extra})
+
+    def center(hid):
+        h = next(h for h in p.hits if h["id"] == hid)
+        return h["x"] + h["w"] / 2, h["y"] + h["h"] / 2
+
+    draw()
+    assert p._click_at(*center("pause")) == "pause" and p.mpv["pause"] is True
+    assert p._click_at(*center("mute")) == "mute" and p.mpv["mute"] is True
+    p._click_at(*center("exit_fs"))
+    assert actions[-1] == ("exit_fullscreen", {})
+    p._click_at(*center("subs"))
+    assert p.menu == "sid"
+    draw()
+    assert p._click_at(*center("track:sid:2")) == "track:sid:2" and p.mpv["sid"] == 2 and p.menu is None
+    p._click_at(*center("subs"))
+    draw()
+    p._click_at(*center("track:sid:no"))
+    assert p.mpv["sid"] == "no"
+    assert p._click_at(960, 300) == "video"  # sur l'image : rien (deux de suite = plein écran, géré par _input_loop)
+    # en direct : chaîne − / +
+    p.item = {"kind": "live", "id": "9", "title": "TV"}
+    _, p.hits = P.osd({**p.item, "controls": True, "fullscreen": True})
+    p._click_at(*center("zap_down"))
+    assert actions[-1] == ("zap", {"delta": 1})

@@ -309,10 +309,7 @@ export function RecordingSettings() {
           <input className="input mono" type="number" min={0} max={60} value={s.margin_after} onChange={(e) => upd({ margin_after: Number(e.target.value) })} style={{ width: 70 }} />
         </div>
       </Row>
-      <Row title="Mettre à jour au démarrage" desc="Le catalogue et le guide se rafraîchissent en arrière-plan à l'ouverture.">
-        <Switch checked={s.refresh_on_start} onChange={(v) => upd({ refresh_on_start: v })} />
-      </Row>
-      <Row title="Mise à jour automatique" desc={`Toutes les ${s.refresh_hours} h tant que l'appli est ouverte.`}>
+      <Row title="Mise à jour du catalogue" desc={`Le catalogue est gardé sur ce PC : il n'est rechargé que s'il a plus de ${s.refresh_hours} h (à l'ouverture ou pendant que l'appli est ouverte). Le guide se recharge tout seul avant d'arriver à sa fin.`}>
         <Segmented value={String(s.refresh_hours)} onChange={(v) => upd({ refresh_hours: Number(v) })} options={["6", "12", "24", "48"].map((h) => ({ value: h, label: `${h} h` }))} />
       </Row>
     </>

@@ -1043,11 +1043,17 @@ def register(app: FastAPI, S) -> None:
             try:
                 s = sess.settings()
                 for a in store.accounts():
+                    # le catalogue est gardé sur le PC : rechargé seulement quand il a plus de 12 h (réglable), au
+                    # lancement comme pendant que l'appli reste ouverte ; le guide seul quand il arrive à sa fin
                     age = time.time() - (a.get("synced") or 0)
-                    if (s["refresh_on_start"] and age > 600 and a.get("synced") is not None) or age > s["refresh_hours"] * 3600:
+                    if age > s["refresh_hours"] * 3600:
                         start_sync(a["id"])
                         a["synced"] = time.time()
-                s["refresh_on_start"] = False
+                    else:
+                        last = store.one("SELECT MAX(stop) AS t FROM epg WHERE account=?", (a["id"],))["t"]
+                        epg_age = time.time() - (a.get("epg_synced") or 0)
+                        if last is not None and last < time.time() + 6 * 3600 and epg_age > 3600:
+                            start_sync(a["id"], "epg")
             except Exception:  # noqa: BLE001
                 log.exception("auto refresh")
             time.sleep(1800)
