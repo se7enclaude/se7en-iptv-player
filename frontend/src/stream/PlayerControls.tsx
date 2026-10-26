@@ -65,8 +65,8 @@ export function PlayerControls({ st, live, extra }: { st: PlayerState | null; li
   const playing = !!st?.playing;
   const audio = st?.tracks?.filter((t) => t.type === "audio") ?? [];
   const subs = st?.tracks?.filter((t) => t.type === "sub") ?? [];
-  const label = (t: { id: number; lang?: string; title?: string; codec?: string }) =>
-    [LANG[t.lang ?? ""] ?? t.lang?.toUpperCase(), t.title, t.codec && `(${t.codec})`].filter(Boolean).join(" · ") || `Piste ${t.id}`;
+  const label = (t: { id: number; lang?: string; title?: string; codec?: string; label?: string }) =>
+    t.label || [LANG[t.lang ?? ""] ?? t.lang?.toUpperCase(), t.title, t.codec && `(${t.codec})`].filter(Boolean).join(" · ") || `Piste ${t.id}`;
   const seekable = !live && (st?.duration ?? 0) > 0;
 
   return (

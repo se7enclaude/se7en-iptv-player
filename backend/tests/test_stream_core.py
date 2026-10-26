@@ -427,6 +427,10 @@ def test_fullscreen_bubbles_and_menus():
         def seek(self, *a):
             self.setdefault("seeks", []).append(a)
 
+        def command(self, name, *a):
+            if name == "seek":
+                self.seek(*a)
+
         def __setitem__(self, k, v):
             dict.__setitem__(self, k, v)
 
@@ -482,12 +486,16 @@ def test_duration_estimated_when_the_file_has_none():
         def seek(self, *a):
             self.seeks.append(a)
 
+        def command(self, name, *a):
+            if name == "seek":
+                self.seek(*a)
+
     p = P.Player("t", lambda: {})
     p.mpv = M()
     p.item = {"kind": "movie", "id": "1"}
     assert p._duration() == 2400
     p.seek(1200, absolute=True)
-    assert p.mpv.seeks[-1] == (50.0, "absolute-percent")
+    assert p.mpv.seeks[-1] == (50.0, "absolute-percent+exact")
     p.mpv.duration = 3000.0
     p.seek(1200, absolute=True)
-    assert p.mpv.seeks[-1] == (1200, "absolute")
+    assert p.mpv.seeks[-1] == (1200, "absolute+exact")

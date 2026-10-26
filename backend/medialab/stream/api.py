@@ -299,7 +299,7 @@ def register(app: FastAPI, S) -> None:
         if url.startswith("http") and not (body.type == "live" and player.preloaded() == body.id):
             log.info("Play %s %s (relais local)", body.type, redact(url))
             url = relay.url_for(url, ua)
-        player.play(url, item, start_at, ua)
+        player.play(url, item, start_at, ua, track_langs() if body.type in ("movie", "episode") else None)
         if player.preloaded() is None:  # la chaîne ouverte d'avance vient d'être affichée (ou il n'y en avait pas)
             conns.release(aid, "preload")
         if body.type == "live":
@@ -460,6 +460,20 @@ def register(app: FastAPI, S) -> None:
             bus.publish("player", {"event": "fullscreen", "on": on})
         return on
 
+    def remember_track(kind: str, value) -> None:
+        """Langue audio / de sous-titres choisie : retenue pour ce profil et reprise au film suivant."""
+        if kind == "sid" and value in ("no", None, False):
+            lang = "no"
+        else:
+            t = next((t for t in player.snapshot().get("tracks", [])
+                      if t["id"] == value and t["type"] == ("audio" if kind == "aid" else "sub")), None)
+            lang = t.get("lang") if t else None
+        if lang and lang not in ("und", "qaa", "mul"):
+            store.run("INSERT OR REPLACE INTO tracks VALUES (?,?,?)", (sess.profile, kind, lang))
+
+    def track_langs() -> dict:
+        return {r["kind"]: r["lang"] for r in store.q("SELECT kind, lang FROM tracks WHERE profile=?", (sess.profile,))}
+
     def on_action(action: str, data: dict) -> None:
         try:
             if action == "fullscreen":
@@ -488,6 +502,8 @@ def register(app: FastAPI, S) -> None:
                         bus.publish("player", {"event": "zapped", "id": row["id"]})
                 sess.digit_timer = threading.Timer(1.4, go)
                 sess.digit_timer.start()
+            elif action == "track":
+                remember_track(data["kind"], data["id"])
             else:
                 bus.publish("player", {"event": "action", "action": action})
         except MediaLabError as e:
@@ -543,10 +559,8 @@ def register(app: FastAPI, S) -> None:
                 player.add_subtitle(str(v))
             elif c in ("aid", "sid", "speed", "video-aspect-override", "panscan", "sub-delay", "audio-delay", "af", "ontop"):
                 player.set(c, v)
-                if c in ("aid", "sid") and v not in (None, "no", False):  # langue choisie mémorisée pour ce profil
-                    t = next((t for t in player.snapshot().get("tracks", []) if t["id"] == v and t["type"] == ("audio" if c == "aid" else "sub")), None)
-                    if t and t.get("lang"):
-                        store.run("INSERT OR REPLACE INTO tracks VALUES (?,?,?)", (sess.profile, c, t["lang"]))
+                if c in ("aid", "sid"):  # langue choisie mémorisée pour ce profil
+                    remember_track(c, v)
             else:
                 raise MediaLabError("invalid", "Commande inconnue.")
             return {"ok": True}

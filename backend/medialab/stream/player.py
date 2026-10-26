@@ -293,18 +293,78 @@ def osd(state: dict, W: int = 1920, H: int = 1080) -> tuple[str, list[dict]]:
 
 
 # ------------------------------------------------------------------ bulles (verre liquide)
-LANGS = {"fre": "Français", "fra": "Français", "fr": "Français", "eng": "Anglais", "en": "Anglais", "ara": "Arabe",
-         "ar": "Arabe", "spa": "Espagnol", "es": "Espagnol", "ger": "Allemand", "deu": "Allemand", "de": "Allemand",
-         "ita": "Italien", "it": "Italien", "por": "Portugais", "pt": "Portugais", "tur": "Turc", "tr": "Turc",
-         "dut": "Néerlandais", "nld": "Néerlandais", "nl": "Néerlandais", "pol": "Polonais", "rus": "Russe", "jpn": "Japonais"}
+# nom français des langues : codes ISO 639-2 (B et T), ISO 639-1, variantes régionales (« fr-FR ») et noms anglais
+_LANG_GROUPS = {
+    "Français": "fre fra fr french francais français", "Anglais": "eng en english",
+    "Arabe": "ara ar arabic", "Espagnol": "spa es spanish castellano", "Allemand": "ger deu de german",
+    "Italien": "ita it italian", "Portugais": "por pt portuguese", "Turc": "tur tr turkish",
+    "Néerlandais": "dut nld nl dutch", "Polonais": "pol pl polish", "Russe": "rus ru russian",
+    "Japonais": "jpn ja japanese", "Coréen": "kor ko korean", "Chinois": "chi zho zh chinese mandarin",
+    "Cantonais": "yue cantonese", "Grec": "gre ell el greek", "Hébreu": "heb he hebrew", "Hongrois": "hun hu hungarian",
+    "Tchèque": "cze ces cs czech", "Slovaque": "slo slk sk slovak", "Roumain": "rum ron ro romanian",
+    "Suédois": "swe sv swedish", "Norvégien": "nor no nob nb nno nn norwegian", "Danois": "dan da danish",
+    "Finnois": "fin fi finnish", "Islandais": "ice isl is icelandic", "Thaï": "tha th thai",
+    "Vietnamien": "vie vi vietnamese", "Indonésien": "ind id indonesian", "Malais": "may msa ms malay",
+    "Ukrainien": "ukr uk ukrainian", "Bulgare": "bul bg bulgarian", "Croate": "hrv hr croatian",
+    "Serbe": "srp sr serbian", "Slovène": "slv sl slovenian", "Bosniaque": "bos bs bosnian",
+    "Albanais": "alb sqi sq albanian", "Macédonien": "mac mkd mk macedonian", "Lituanien": "lit lt lithuanian",
+    "Letton": "lav lv latvian", "Estonien": "est et estonian", "Persan": "per fas fa persian farsi",
+    "Hindi": "hin hi hindi", "Ourdou": "urd ur urdu", "Bengali": "ben bn bengali", "Tamoul": "tam ta tamil",
+    "Télougou": "tel te telugu", "Kurde": "kur ku kurdish", "Arménien": "arm hye hy armenian",
+    "Géorgien": "geo kat ka georgian", "Catalan": "cat ca catalan", "Basque": "baq eus eu basque",
+    "Galicien": "glg gl galician", "Berbère": "ber kab tzm kabyle amazigh", "Swahili": "swa sw swahili",
+    "Tagalog": "tgl fil tl tagalog filipino", "Latin": "lat la latin",
+    "Version originale": "qaa vo vost original", "Plusieurs langues": "mul multi",
+}
+LANGS = {code: name for name, codes in _LANG_GROUPS.items() for code in codes.split()}
+_CODECS = {"ac3": "Dolby Digital", "eac3": "Dolby Digital Plus", "truehd": "Dolby TrueHD", "dts": "DTS", "aac": "AAC",
+           "mp3": "MP3", "mp2": "MP2", "opus": "Opus", "vorbis": "Vorbis", "flac": "FLAC", "pcm_s16le": "PCM",
+           "hdmv_pgs_subtitle": "image", "dvd_subtitle": "image", "dvb_subtitle": "image", "dvb_teletext": "télétexte"}
+_NOISE = re.compile(r"^(?:audio|sub(?:title)?s?|track|piste|stream|und)(?:[ _-]?\d+)?$", re.I)  # « audio_1 » des flux HLS
+
+
+def lang_name(code: str | None) -> str:
+    c = (code or "").strip().lower()
+    if not c or c in ("und", "unk", "zxx", "mis"):
+        return ""
+    return LANGS.get(c) or LANGS.get(c.replace("_", "-").split("-")[0]) or c.upper()
 
 
 def track_label(t: dict, n: int) -> str:
-    name = LANGS.get((t.get("lang") or "").lower(), (t.get("lang") or "").upper())
+    """Nom lisible d'une piste : langue, titre du fichier (VFF, VFQ, Commentaires…) et ce qui la distingue des autres
+    (sous-titres forcés ou pour sourds et malentendants, son 5.1)."""
+    name = lang_name(t.get("lang"))
     title = (t.get("title") or "").strip()
-    if title and title.lower() not in name.lower():
-        name = f"{name} · {title}" if name else title
-    return _esc(name or f"Piste {n}")[:40]
+    parts = [name] if name else []
+    if title and not _NOISE.match(title) and title.lower() not in name.lower() and lang_name(title) != name:
+        parts.append(title)
+    low = title.lower()
+    if t.get("forced") and "forc" not in low:
+        parts.append("Forcés")
+    if t.get("hearing_impaired") and not any(k in low for k in ("sdh", "malentend", "sourd", "hearing")):
+        parts.append("Sourds et malentendants")
+    ch = t.get("channels") or 0
+    if t.get("type") == "audio" and ch > 2 and "5.1" not in low and "7.1" not in low:
+        parts.append({6: "5.1", 8: "7.1"}.get(ch, f"{ch} canaux"))
+    return (" · ".join(parts) or f"Piste {n}")[:48]
+
+
+def track_labels(tracks: list[dict]) -> list[str]:
+    """Noms des pistes d'un même type ; deux pistes au même nom sont départagées par leur format, puis numérotées."""
+    base = [track_label(t, n + 1) for n, t in enumerate(tracks)]
+    labels = list(base)
+    for i, t in enumerate(tracks):
+        twins = [u for u, lab in zip(tracks, base) if lab == base[i]]
+        if len(twins) > 1 and len({(u.get("codec") or "").lower() for u in twins}) > 1:
+            codec = (t.get("codec") or "").lower()
+            labels[i] = f"{base[i]} · {_CODECS.get(codec, codec.upper())}" if codec else base[i]
+    final = list(labels)
+    seen: dict[str, int] = {}
+    for i, lab in enumerate(labels):
+        if labels.count(lab) > 1:
+            seen[lab] = seen.get(lab, 0) + 1
+            final[i] = f"{lab} ({seen[lab]})"
+    return final
 
 
 def _circle(cx: float, cy: float, r: float) -> str:
@@ -479,29 +539,43 @@ def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
         kind = "audio" if menu == "aid" else "sub"
         tracks = [t for t in state.get("tracks") or [] if t.get("type") == kind]
         rows = ([{"id": "no", "label": "Désactivés", "selected": not any(t.get("selected") for t in tracks)}] if menu == "sid" else []) + [
-            {"id": str(t.get("id")), "label": track_label(t, n + 1), "selected": bool(t.get("selected"))} for n, t in enumerate(tracks)]
+            {"id": str(t.get("id")), "label": _esc(lab), "selected": bool(t.get("selected"))}
+            for t, lab in zip(tracks, track_labels(tracks))]
         if not tracks:  # le fichier du fournisseur n'en contient pas : on le dit, plutôt qu'une liste vide
             rows.append({"id": "", "label": "Aucun sous-titre dans ce fichier" if menu == "sid" else "Une seule langue",
                          "selected": False, "note": True})
         anchor = next(h for h in hits if h["id"] == ("audio" if menu == "aid" else "subs"))
-        mw, rh = 360, 50
-        mh = 16 + rh * len(rows) + 40
+        # beaucoup de pistes (30 sous-titres, courant) : plusieurs colonnes, pour que toutes restent dans l'écran
+        room = anchor["y"] - 20 - 16 - 56
+        cw = 380
+        for rh in (50, 42, 36):
+            per = max(1, int(room // rh))
+            cols = -(-len(rows) // per)
+            if cols * cw + 32 <= W:
+                break
+        cols = min(cols, max(1, int((W - 32) // cw)))
+        per = -(-len(rows) // cols)
+        rows = rows[:per * cols]
+        mw = cw * cols
+        mh = 16 + rh * per + 40
         mx = max(16, min(W - mw - 16, anchor["x"] + anchor["w"] / 2 - mw / 2))
         my = anchor["y"] - 20 - mh
         ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H30&\p1}}{_rr(mx, my, mw, mh, 24)}")
         ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&HA8&\1a&HFF&\p1}}{_rr(mx, my, mw, mh, 24)}")
         ev.append(rf"{{\an7\pos({mx + 22:.0f},{my + 14:.0f})\fnManrope\b1\fs20\1c&HB8B8B8&\bord0\shad0}}{'Langue audio' if menu == 'aid' else 'Sous-titres'}")
+        fs = 24 if rh >= 50 else 21
         for n, row in enumerate(rows):
-            ry = my + 46 + n * rh
-            hot = bool(hover and row["id"] and mx <= hover[0] <= mx + mw and ry <= hover[1] <= ry + rh)
+            cx0 = mx + (n // per) * cw
+            ry = my + 46 + (n % per) * rh
+            hot = bool(hover and row["id"] and cx0 <= hover[0] <= cx0 + cw and ry <= hover[1] <= ry + rh)
             if row["selected"] or hot:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'D0' if not row['selected'] else 'B0'}&\p1}}{_rr(mx + 10, ry + 4, mw - 20, rh - 8, 18)}")
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'D0' if not row['selected'] else 'B0'}&\p1}}{_rr(cx0 + 10, ry + 4, cw - 20, rh - 8, min(18, rh / 2 - 4))}")
             colour = "&H9A9A9A&" if row.get("note") else "&HFFFFFF&"
-            ev.append(rf"{{\an4\pos({mx + 28:.0f},{ry + rh / 2:.0f})\fnManrope\b{1 if row['selected'] else 0}\fs{20 if row.get('note') else 24}\1c{colour}\bord0\shad0}}{row['label']}")
+            ev.append(rf"{{\an4\pos({cx0 + 28:.0f},{ry + rh / 2:.0f})\fnManrope\b{1 if row['selected'] else 0}\fs{20 if row.get('note') else fs}\1c{colour}\bord0\shad0}}{row['label']}")
             if row["selected"]:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(mx + mw - 34, ry + rh / 2, 6)}")
+                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(cx0 + cw - 34, ry + rh / 2, 6)}")
             if row["id"]:
-                hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": mx, "y": ry, "w": mw, "h": rh})
+                hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": cx0, "y": ry, "w": cw, "h": rh})
         # après les pistes (elles passent d'abord), avant les bulles : un clic dans la liste hors piste ne fait rien
         hits.insert(sum(1 for h in hits if h["id"].startswith("track:")), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
     return hits
@@ -566,7 +640,8 @@ class Player:
                     mute="yes" if muted else "no",
                     # fluidité : chaînes entrelacées (sport en 1080i) désentrelacées, images calées sur l'écran
                     deinterlace="auto", video_sync="display-resample", interpolation="yes", tscale="oversample",
-                    alang=s.get("audio_lang", "fr,fre,fra,en,eng"), slang=s.get("sub_lang", "fr,fre,fra"))
+                    alang=s.get("audio_lang", "fr,fre,fra,en,eng"), slang=s.get("sub_lang", "fr,fre,fra"),
+                    subs_with_matching_audio="forced")
         if fonts.is_dir():
             opts.update(osd_fonts_dir=str(fonts), sub_fonts_dir=str(fonts))
         if os.environ.get("SE7EN_MPV_LOG"):  # diagnostic : journal complet de mpv dans ce fichier
@@ -752,7 +827,8 @@ class Player:
             self.on_action("digit", {"digit": key})
 
     # ---------------------------------------------------------------- lecture
-    def play(self, url: str, item: dict, start: float = 0.0, user_agent: str = "") -> None:
+    def play(self, url: str, item: dict, start: float = 0.0, user_agent: str = "", langs: dict | None = None) -> None:
+        """``langs`` : langues choisies la dernière fois par ce profil ({"aid": "eng", "sid": "fre" ou "no"})."""
         with self.lock:
             m = self._ensure()
             sp = self._spare
@@ -767,11 +843,25 @@ class Player:
             self.retries = 0
             self.stopped_by_user = False
             m.user_agent = user_agent or ""
+            # une piste choisie à la main (aid=3) resterait pour le fichier suivant, quelle que soit sa langue (et sans
+            # son s'il en a moins) : chaque nouveau film repart du choix par langue
+            m.aid = "auto"
+            m.sid = "auto"
             opts = {}
             if start > 0:
                 opts["start"] = str(int(start))
+            s = self.settings()
+            if (langs or {}).get("aid"):
+                opts["alang"] = f"{langs['aid']},{s.get('audio_lang', 'fr,fre,fra,en,eng')}"
+            sid = (langs or {}).get("sid")
+            if sid == "no":  # sous-titres coupés la dernière fois : seulement les forcés
+                opts.update(slang="none", subs_fallback="no")  # (une liste vide est refusée par loadfile)
+            elif sid:  # choisis exprès, même dans la langue du son
+                opts.update(slang=f"{sid},{s.get('sub_lang', 'fr,fre,fra')}", subs_with_matching_audio="yes")
             log.info("Play %s %s", item.get("kind"), redact(url))
-            m.loadfile(url, "replace", **opts)
+            # valeurs écrites « %longueur%valeur » : python-mpv joint les options par des virgules, et une liste de
+            # langues (« eng,fr,fre ») serait coupée -> loadfile refusé, le film ne démarrait pas
+            m.loadfile(url, "replace", **{k: f"%{len(str(v).encode())}%{v}" for k, v in opts.items()})
             m.pause = False
             self.show_osd(5)
             bus.publish("player", {"event": "play", "item": self.item})
@@ -819,10 +909,12 @@ class Player:
         if self.mpv is None or not self.item or self.item.get("kind") == "live":
             return
         try:
+            # « exact » : sinon, sur un flux réseau, mpv s'arrête sur l'image-clé d'avant (jusqu'à 10 s plus tôt que
+            # l'endroit cliqué ; m.seek() de python-mpv demande « default-precise », qui fait ça)
             if absolute and not self.mpv.duration and self._duration() > 0:  # durée estimée : on vise un pourcentage
-                self.mpv.seek(max(0.0, min(100.0, seconds / self._duration() * 100)), "absolute-percent")
+                self.mpv.command("seek", max(0.0, min(100.0, seconds / self._duration() * 100)), "absolute-percent+exact")
             else:
-                self.mpv.seek(seconds, "absolute" if absolute else "relative")
+                self.mpv.command("seek", seconds, "absolute+exact" if absolute else "relative+exact")
         except Exception:  # noqa: BLE001 - flux non navigable
             return
         self.show_osd(3)
@@ -898,6 +990,7 @@ class Player:
                 _t, prop, val = hid.split(":", 2)
                 try:
                     self.set(prop, "no" if val == "no" else int(val))
+                    self.on_action("track", {"kind": prop, "id": "no" if val == "no" else int(val)})
                 except Exception:  # noqa: BLE001
                     pass
                 self.menu = None
@@ -994,8 +1087,14 @@ class Player:
                    "cache_s": g("demuxer-cache-duration", 0), "speed": g("speed", 1),
                    "aspect": g("video-aspect-override", "-1"), "tracks": [
                        {"id": t.get("id"), "type": t.get("type"), "lang": t.get("lang"), "title": t.get("title"),
-                        "codec": t.get("codec"), "selected": bool(t.get("selected")), "external": bool(t.get("external"))}
+                        "codec": t.get("codec"), "selected": bool(t.get("selected")), "external": bool(t.get("external")),
+                        "forced": bool(t.get("forced")), "default": bool(t.get("default")),
+                        "hearing_impaired": bool(t.get("hearing-impaired")), "channels": t.get("demux-channel-count") or 0}
                        for t in (g("track-list", []) or []) if t.get("type") in ("audio", "sub")]})
+        for kind in ("audio", "sub"):
+            same = [t for t in st["tracks"] if t["type"] == kind]
+            for t, lab in zip(same, track_labels(same)):
+                t["label"] = lab
         return st
 
     def on_progress(self, cb: Callable[[dict, float, float], None]) -> None:
@@ -1055,9 +1154,12 @@ class Player:
     def shutdown(self) -> None:
         try:
             self._save_progress()
-            if self.mpv is not None:
-                self.mpv.terminate()
-            if self._spare is not None:
-                self._spare["mpv"].terminate()
+            for m in (self.mpv, (self._spare or {}).get("mpv")):
+                if m is not None:
+                    try:
+                        m.command("stop")  # arrêter la lecture avant de fermer le moteur
+                    except Exception:  # noqa: BLE001
+                        pass
+                    m.terminate()
         except Exception:  # noqa: BLE001
             pass

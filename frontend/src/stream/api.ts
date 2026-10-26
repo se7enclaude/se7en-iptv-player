@@ -242,6 +242,8 @@ export interface Track {
   codec?: string;
   selected?: boolean;
   external?: boolean;
+  forced?: boolean;
+  label?: string;
 }
 
 export interface PlayerState {

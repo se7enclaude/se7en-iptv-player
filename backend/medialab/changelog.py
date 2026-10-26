@@ -2,6 +2,22 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.6": {
+        "fr": ["Toutes les pistes accessibles : avec beaucoup de sous-titres (30 et plus), le haut de la liste sortait de "
+               "l'écran ; elle s'affiche maintenant en colonnes.",
+               "Noms de pistes lisibles : « Grec », « Coréen », « Version originale », « Français · VFQ · 5.1 », "
+               "« Français · Forcés », « Français · SDH » au lieu de codes ou de « Français » en double.",
+               "Plus de sous-titres français affichés d'office sur un film en français : seuls les sous-titres forcés "
+               "(passages en langue étrangère) s'affichent tout seuls.",
+               "Ta langue est retenue : passe un film en anglais ou coupe les sous-titres, le film suivant s'ouvre pareil. "
+               "Et une piste choisie à la main ne passe plus au film suivant (mauvaise langue, voire pas de son).",
+               "Les sauts dans la barre tombent juste : ils s'arrêtaient jusqu'à 10 s avant l'endroit cliqué."],
+        "en": ["All tracks reachable: with many subtitles (30+), the top of the list went off screen; it now uses columns.",
+               "Readable track names (Greek, Korean, Original version, French · 5.1, Forced, SDH) instead of codes.",
+               "No more French subtitles shown by default over French audio: only forced subtitles show by themselves.",
+               "Your language is remembered for the next film, and a hand-picked track number no longer carries over.",
+               "Seeking lands exactly where you click (it stopped up to 10 s earlier)."],
+    },
     "1.1.5": {
         "fr": ["Le minuteur et l'heure de fin avancent enfin pendant le film, et la barre de progression suit.",
                "Langues audio et sous-titres : la liste montre enfin les pistes du film (elle disait toujours « aucun "

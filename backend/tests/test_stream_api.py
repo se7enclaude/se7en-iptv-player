@@ -40,7 +40,7 @@ def server():
 def api(server):
     played = []
     orig = P.Player.play, P.Player.stop
-    P.Player.play = lambda self, url, item, start=0.0, user_agent="": played.append((url, item, start))
+    P.Player.play = lambda self, url, item, start=0.0, user_agent="", langs=None: played.append((url, item, start))
     P.Player.stop = lambda self: None
     services = Services(token=TOKEN)
     with TestClient(create_app(services)) as c:

@@ -1,15 +1,17 @@
-## se7en IPTV Player 1.1.5
+## se7en IPTV Player 1.1.6
 
-- **Le minuteur avance** : la position, l'heure de fin et la barre de progression suivent enfin le film. Le lecteur
-  lisait la position au mauvais endroit (un réglage au lieu de l'état de lecture) et trouvait toujours 0:00.
-- **Langues audio et sous-titres** : même cause, la liste des pistes restait vide (« aucun sous-titre »). Elle montre
-  maintenant toutes les langues et tous les sous-titres du film, et tu peux en changer.
-- **Volume** : une réglette en verre à côté du bouton du son, au clic ou en glissant ; la molette et les flèches la
-  font bouger au lieu d'afficher un gros « Volume » au milieu de l'image. Les barres de la fenêtre sont refaites.
-- **« Connexion perdue · nouvelle tentative » au zapping** : beaucoup de serveurs mettent 1 à 3 s à libérer la chaîne
-  précédente et refusaient la nouvelle (erreur 403). Les chaînes et les replays passent maintenant par le relais
-  local, qui patiente le temps que le serveur libère la place. Si le serveur refuse vraiment (abonnement déjà utilisé
-  sur un autre appareil), le message le dit au lieu de « connexion perdue ».
+Langues audio et sous-titres vérifiés de bout en bout : 5 formats de fichiers (mkv, mp4, mp4 avec l'index à la fin, ts,
+avi), une chaîne en direct et un épisode, jusqu'à 6 langues audio et 32 sous-titres. Le lecteur trouve toutes les
+pistes ; voici ce qui est corrigé autour :
 
-## Installation
-Installe ou mets à jour depuis **Seventh OS**, ou télécharge `se7en-IPTV-Player-Setup.exe` ci-dessous.
+- **Toutes les pistes accessibles** : avec 30 sous-titres ou plus, le haut de la liste sortait de l'écran (14 pistes
+  sur 32 impossibles à choisir). La liste passe en colonnes et tout tient à l'écran.
+- **Noms lisibles** : « Grec », « Coréen », « Version originale », « Français · VFQ · 5.1 », « Français · Forcés »,
+  « Français · SDH » au lieu de « GRE », « QAA », « audio_1 » ou deux « Français » identiques (plus de 50 langues).
+- **Pas de sous-titres par-dessus la VF** : un film en français dont les sous-titres français sont marqués « par
+  défaut » les affichait d'office. Seuls les sous-titres forcés (passages en langue étrangère) s'affichent tout seuls.
+- **Ta langue est retenue** : passe un film en anglais, ou coupe les sous-titres, et le film suivant de ton profil
+  s'ouvre pareil (le choix était enregistré mais jamais réutilisé).
+- **Une piste choisie à la main ne suit plus au film suivant** : le numéro de piste restait (la piste 3 d'un film
+  devenait la piste 3 du suivant, dans une autre langue, voire sans son s'il en avait moins).
+- **Les sauts tombent juste** : sur un flux, cliquer dans la barre s'arrêtait jusqu'à 10 s avant l'endroit visé.

@@ -32,7 +32,9 @@ Write-Host "se7en IPTV Player $Version"
 if (-not $SkipTests) {
   Step "Backend tests"
   Push-Location backend
-  & .\.venv\Scripts\python.exe -m pytest -q -p no:warnings
+  # no:faulthandler : son gestionnaire d'exceptions Windows fait parfois planter libmpv (LuaJIT lève et rattrape
+  # ses propres exceptions SEH 0xE24C4A02) ; l'appli ne l'active pas
+  & .\.venv\Scripts\python.exe -m pytest -q -p no:warnings -p no:faulthandler
   if ($LASTEXITCODE -ne 0) { throw "Backend tests failed" }
   Pop-Location
 }
