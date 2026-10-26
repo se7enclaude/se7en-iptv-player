@@ -148,6 +148,14 @@ export function HomePage() {
     Promise.all([stream.categories("movie"), stream.categories("series")])
       .then(([m, sr]) => setCats({ movie: big(m.categories), series: big(sr.categories) }))
       .catch(() => undefined);
+    // the first page of Films, Séries and TV en direct, made ready in the background: those tabs open at once
+    const pre = window.setTimeout(() => {
+      const live = useStream.getState().liveCategory;
+      for (const k of ["movie", "series"] as const) stream.items(k, { category: "__all", q: "", offset: 0, limit: 120, sort: "default" }).catch(() => undefined);
+      stream.categories("live").catch(() => undefined);
+      stream.items("live", { category: live, q: "", offset: 0, limit: 300 }).catch(() => undefined);
+    }, 1200);
+    return () => window.clearTimeout(pre);
   }, [version]);
 
   // the hero: newest titles that have artwork, films and series in turn

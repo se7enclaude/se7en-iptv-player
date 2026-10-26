@@ -18,6 +18,7 @@ from ..errors import Canceled, MediaLabError
 from ..events import bus
 from ..logging_setup import get_logger
 from . import catalog, recorder, sync
+from . import search as search_index
 from .player import Player
 from .relay import relay
 from .store import Store, check_pin, hash_pin
@@ -1037,6 +1038,7 @@ def register(app: FastAPI, S) -> None:
             except MediaLabError as e:
                 log.warning("EPG failed for %s: %s", aid, e.message)
                 bus.publish("stream_sync", {"account": aid, "warning": e.message})
+        threading.Thread(target=search_index.warm, args=(store, aid), name="search-warm", daemon=True).start()
         bus.publish("stream_sync", {"account": aid, "done": True, "counts": counts, "epg": epg})
         return {"file_path": None, "title": account["name"], "platform": "stream", "format": f"{sum(v or 0 for v in counts.values())} entrées",
                 "meta": {"account": aid, "epg": epg}}
@@ -1049,6 +1051,7 @@ def register(app: FastAPI, S) -> None:
             try:
                 s = sess.settings()
                 for a in store.accounts():
+                    search_index.warm(store, a["id"])  # index de recherche prêt avant la première recherche
                     # le catalogue est gardé sur le PC : rechargé seulement quand il a plus de 12 h (réglable), au
                     # lancement comme pendant que l'appli reste ouverte ; le guide seul quand il arrive à sa fin
                     age = time.time() - (a.get("synced") or 0)

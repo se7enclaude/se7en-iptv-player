@@ -18,9 +18,29 @@ from .xtream import XtreamClient, as_float, as_int, as_str
 TABLE = {"live": "channels", "movie": "vod", "series": "series"}
 
 
+# Les catégories adultes en une liste (calculée une fois par requête), pas une recherche par film : sur 100 000 films,
+# c'était la moitié du temps de chaque page. Paramètres : compte, type.
+ADULT_OUT = "COALESCE(t.category, '') NOT IN (SELECT id FROM categories WHERE account=? AND type=? AND adult=1)"
+
+
 def _adult_filter(show_adult: bool) -> str:
-    return "" if show_adult else (" AND NOT EXISTS (SELECT 1 FROM categories k WHERE k.account=t.account AND k.type=? "
-                                  "AND k.id=t.category AND k.adult=1)")
+    return "" if show_adult else " AND " + ADULT_OUT
+
+# Nombre total d'une liste : gardé tant que le catalogue, les éléments masqués et la qualité n'ont pas changé (sur un gros
+# catalogue, compter coûte plus cher que lire la page).
+_COUNTS: dict[tuple, int] = {}
+
+
+def _count(store: Store, aid: str, profile: str, sql: str, params: list) -> int:
+    acc = store.one("SELECT synced FROM accounts WHERE id=?", (aid,)) or {}
+    hid = store.one("SELECT COUNT(*) AS n FROM hidden WHERE profile=? AND account=?", (profile, aid))["n"]
+    key = (sql, tuple(params), acc.get("synced"), hid, store.get_meta("quality_pref_index", "best"))
+    n = _COUNTS.get(key)
+    if n is None:
+        if len(_COUNTS) > 200:
+            _COUNTS.clear()
+        n = _COUNTS[key] = store.one(sql, params)["n"]
+    return n
 
 
 def categories(store: Store, aid: str, typ: str, profile: str, show_adult: bool) -> list[dict]:
@@ -31,7 +51,7 @@ def categories(store: Store, aid: str, typ: str, profile: str, show_adult: bool)
         (aid, typ))
     fav = store.one("SELECT COUNT(*) AS n FROM favorites WHERE profile=? AND account=? AND type=?", (profile, aid, typ))["n"]
     total = store.one(f"SELECT COUNT(*) AS n FROM {table} t WHERE t.account=?" + _adult_filter(show_adult),
-                      (aid,) if show_adult else (aid, typ))["n"]
+                      (aid,) if show_adult else (aid, aid, typ))["n"]
     special = [{"id": "__all", "name": "Tout", "n": total, "adult": 0}, {"id": "__fav", "name": "Favoris", "n": fav, "adult": 0}]
     if typ != "live":
         special.append({"id": "__recent", "name": "Ajouts récents", "n": min(total, 200), "adult": 0})
@@ -60,8 +80,8 @@ def items(store: Store, aid: str, typ: str, profile: str, show_adult: bool, cate
             where.append("t.norm LIKE ?")
             params.append(f"%{word}%")
     if not show_adult:
-        where.append("NOT EXISTS (SELECT 1 FROM categories k WHERE k.account=t.account AND k.type=? AND k.id=t.category AND k.adult=1)")
-        params.append(typ)
+        where.append(ADULT_OUT)
+        params += [aid, typ]
     where.append("t.id NOT IN (SELECT item FROM hidden WHERE profile=? AND account=? AND type=?)")
     params += [profile, aid, typ]
     order = "t.position"
@@ -82,17 +102,31 @@ def items(store: Store, aid: str, typ: str, profile: str, show_adult: bool, cate
         Q.ensure(store, aid, quality)
         # une version par groupe (calculée d'avance par quality.index) ; les favoris restent ceux que tu as choisis
         flag = None if category == "__fav" else ("rep_all" if category in ("__all", "__recent", "") else "rep_cat")
-        src = (f"FROM {table} t LEFT JOIN variants v ON v.account=t.account AND v.type=? AND v.id=t.id WHERE {sql_where}"
-               + (f" AND (v.id IS NULL OR v.{flag}=1)" if flag else ""))
-        gparams = [typ] + params
-        total = store.one(f"SELECT COUNT(*) AS n {src}", gparams)["n"]
-        if order == "t.position" and flag:
-            order = f"COALESCE(v.pos_{flag[4:]}, t.position), t.position"
+        # chaque élément a sa ligne dans variants (quality.index) : la liste complète dans l'ordre du fournisseur part de
+        # l'index de variants (sans retrier 100 000 lignes) ; les autres tris partent de l'index du tableau (CROSS JOIN
+        # impose cet ordre à SQLite)
+        if flag == "rep_all" and order == "t.position":
+            src = (f"FROM variants v JOIN {table} t ON t.account=v.account AND t.id=v.id "
+                   f"WHERE v.account=? AND v.type=? AND v.rep_all=1 AND {sql_where}")
+            gparams = [aid, typ] + params
+            order = "v.pos_all, t.position"
+        elif flag:
+            src = (f"FROM {table} t CROSS JOIN variants v ON v.account=t.account AND v.type=? AND v.id=t.id "
+                   f"WHERE {sql_where} AND v.{flag}=1")
+            gparams = [typ] + params
+            if order == "t.position":
+                order = f"v.pos_{flag[4:]}, t.position"
+        else:
+            src = f"FROM {table} t LEFT JOIN variants v ON v.account=t.account AND v.type=? AND v.id=t.id WHERE {sql_where}"
+            gparams = [typ] + params
+        total = _count(store, aid, profile, f"SELECT COUNT(*) AS n {src}", gparams) if category != "__fav" else \
+            store.one(f"SELECT COUNT(*) AS n {src}", gparams)["n"]
         rows = store.q(f"SELECT t.*, v.grp, v.quality {src} ORDER BY {order} LIMIT ? OFFSET ?",
                        gparams + order_params + [lim, offset])
         _attach_variants(store, aid, typ, profile, rows)
     else:
-        total = store.one(f"SELECT COUNT(*) AS n FROM {table} t WHERE {sql_where}", params)["n"]
+        csql = f"SELECT COUNT(*) AS n FROM {table} t WHERE {sql_where}"
+        total = _count(store, aid, profile, csql, params) if category != "__fav" else store.one(csql, params)["n"]
         rows = store.q(f"SELECT t.* FROM {table} t WHERE {sql_where} ORDER BY {order} LIMIT ? OFFSET ?",
                        params + order_params + [lim, offset])
     favs = {r["item"] for r in store.q("SELECT item FROM favorites WHERE profile=? AND account=? AND type=?", (profile, aid, typ))}
@@ -322,9 +356,8 @@ def similar(store: Store, aid: str, typ: str, d: dict, profile: str, show_adult:
                                         (aid, typ, f"%{norm(g)}%"))]
         if ids:
             add(store.q(f"SELECT id, name, logo, year, rating FROM {TABLE[typ]} t WHERE account=? AND id IN "
-                        f"({','.join('?' * len(ids))})" + ("" if show_adult else
-                        " AND NOT EXISTS (SELECT 1 FROM categories k WHERE k.account=t.account AND k.type=? AND k.id=t.category AND k.adult=1)")
-                        + " ORDER BY rating DESC", [aid, *ids] + ([] if show_adult else [typ])))
+                        f"({','.join('?' * len(ids))})" + _adult_filter(show_adult)
+                        + " ORDER BY rating DESC", [aid, *ids] + ([] if show_adult else [aid, typ])))
     if len(out) < limit and d.get("category"):
         add(items(store, aid, typ, profile, show_adult, d["category"], "", 0, 60, sort="rating", quality=quality)["items"])
     return out

@@ -56,6 +56,13 @@ def _index(store: Store, aid: str, typ: str) -> _Index:
     return idx
 
 
+def warm(store: Store, aid: str) -> None:
+    """Prépare l'index de recherche d'un compte (au lancement et après une mise à jour du catalogue) : la première
+    recherche ne prend plus 2 à 3 s sur un gros catalogue."""
+    for typ in catalog.TABLE:
+        _index(store, aid, typ)
+
+
 def _close(a: str, b: str, limit: int) -> bool:
     """Distance d'édition ≤ limit (avec arrêt rapide)."""
     if abs(len(a) - len(b)) > limit:

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { ApiError } from "../api/client";
 import { events } from "../api/ws";
 import { useApp } from "../store/app";
-import { PlayerState, StreamState, stream } from "./api";
+import { PlayerState, StreamState, clearCache, stream } from "./api";
 
 export type Playing = NonNullable<PlayerState["item"]>;
 
@@ -116,7 +116,10 @@ export const useStream = create<StreamStore>((set, get) => ({
     }
     set({ liveCategory: c });
   },
-  bump: () => set({ version: get().version + 1 }),
+  bump: () => {
+    clearCache();
+    set({ version: get().version + 1 });
+  },
 }));
 
 function refreshPending(): void {

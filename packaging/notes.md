@@ -1,10 +1,13 @@
-## se7en IPTV Player 1.1.3
+## se7en IPTV Player 1.1.4
 
-- **Avancer et reculer dans un film marche enfin** : un clic sur la barre de progression va au bon endroit. Le
-  problème venait des fournisseurs qui n'acceptent qu'une connexion à la fois : pour sauter dans un film, le lecteur
-  en ouvrait une deuxième, refusée, et le film restait au début. L'appli passe maintenant par un petit relais local
-  qui ferme l'ancienne connexion avant d'ouvrir la nouvelle.
-- Après une coupure, un film repart là où il en était, plus au début.
+Plus fluide, surtout avec un gros abonnement (mesuré sur un catalogue de 100 000 films, 30 000 séries et 10 000 chaînes) :
+
+- **Lancement** : « Qui regarde ? » en 0,07 s au lieu de 0,33 s, et l'accueil rempli 0,09 s après le choix du profil
+  (au lieu de 0,41 s).
+- **Pages** : Films s'ouvre en 0,1 s au lieu de 0,4 s, le Guide TV demande 13 ms au lieu de 370 ms, une page de films
+  7 ms au lieu de 300 ms. Revenir sur une page est instantané, et Films, Séries et TV en direct sont préparés pendant
+  que tu es sur l'accueil.
+- **Recherche** : l'index est prêt dès le lancement, la première recherche ne fait plus attendre 2 à 3 s.
 
 ## Installation
 Installe ou mets à jour depuis **Seventh OS**, ou télécharge `se7en-IPTV-Player-Setup.exe` ci-dessous.

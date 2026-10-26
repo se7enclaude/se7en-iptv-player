@@ -2,6 +2,19 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.4": {
+        "fr": ["Beaucoup plus rapide sur les gros catalogues (100 000 films) : l'accueil s'affiche en moins d'un dixième "
+               "de seconde après le choix du profil, les pages Films, Séries, TV en direct et Guide s'ouvrent presque "
+               "tout de suite.",
+               "Revenir sur une page est instantané, et les premières pages de Films, Séries et TV en direct sont "
+               "préparées pendant que tu es sur l'accueil.",
+               "La première recherche ne fait plus attendre : l'index est prêt dès le lancement."],
+        "en": ["Much faster on big catalogues (100,000 films): the home screen shows in under a tenth of a second after "
+               "picking the profile, Films, Series, Live TV and Guide open almost at once.",
+               "Going back to a page is instant, and the first pages of Films, Series and Live TV are prepared while "
+               "you are on the home screen.",
+               "The first search no longer waits: the index is ready at launch."],
+    },
     "1.1.3": {
         "fr": ["Avancer et reculer dans un film marche enfin : un clic sur la barre de progression va au bon endroit, "
                "même chez les fournisseurs qui n'acceptent qu'une connexion à la fois.",

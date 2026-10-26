@@ -1,4 +1,26 @@
-import { api } from "../api/client";
+import { api as client } from "../api/client";
+
+/* Lists (catalogue, categories, guide, home) are kept a short while: going back to a page shows it at once instead of
+ * asking the engine again. Any change (POST / PATCH / DELETE, a catalogue update, a profile switch) empties the memo. */
+const memo = new Map<string, { t: number; p: Promise<unknown> }>();
+export function clearCache(): void {
+  memo.clear();
+}
+function cached<T>(url: string, ttl = 120_000): Promise<T> {
+  const hit = memo.get(url);
+  if (hit && Date.now() - hit.t < ttl) return hit.p as Promise<T>;
+  const p = client.get<T>(url);
+  memo.set(url, { t: Date.now(), p });
+  p.catch(() => memo.delete(url));
+  return p;
+}
+const api = {
+  get: client.get,
+  post: <T = any>(...a: Parameters<typeof client.post>) => (clearCache(), client.post<T>(...a)),
+  patch: <T = any>(...a: Parameters<typeof client.patch>) => (clearCache(), client.patch<T>(...a)),
+  del: <T = any>(...a: Parameters<typeof client.del>) => (clearCache(), client.del<T>(...a)),
+  put: <T = any>(...a: Parameters<typeof client.put>) => (clearCache(), client.put<T>(...a)),
+};
 
 export type Kind = "live" | "movie" | "series";
 
@@ -278,23 +300,26 @@ const enc = encodeURIComponent;
 
 export const stream = {
   state: () => api.get<StreamState>(`${S}/state`),
-  home: () => api.get<Home>(`${S}/home`),
+  home: () => cached<Home>(`${S}/home`, 30_000),
   testAccount: (f: Partial<AccountForm>) => api.post<TestResult>(`${S}/accounts/test`, f),
   addAccount: (f: Partial<AccountForm>) => api.post<{ account: Account; summary: TestResult }>(`${S}/accounts`, f),
   editAccount: (id: string, f: Partial<AccountForm>) => api.patch<Account>(`${S}/accounts/${id}`, f),
   deleteAccount: (id: string) => api.del(`${S}/accounts/${id}`),
   selectAccount: (id: string) => api.post(`${S}/accounts/${id}/select`),
   syncAccount: (id: string, what = "all") => api.post(`${S}/accounts/${id}/sync?what=${what}`),
-  categories: (k: Kind) => api.get<{ categories: Category[] }>(`${S}/categories/${k}`),
+  categories: (k: Kind) => cached<{ categories: Category[] }>(`${S}/categories/${k}`),
+  // channels carry « what's on now »: kept 30 s only
   items: (k: Kind, p: { category?: string; q?: string; offset?: number; limit?: number; sort?: string }) =>
-    api.get<Page<Item>>(
+    cached<Page<Item>>(
       `${S}/items/${k}?category=${enc(p.category ?? "__all")}&q=${enc(p.q ?? "")}&offset=${p.offset ?? 0}&limit=${p.limit ?? 200}&sort=${p.sort ?? "default"}`,
+      k === "live" ? 30_000 : 120_000,
     ),
   guide: (p: { category: string; start: number; hours: number; offset: number; limit: number }) =>
-    api.get<{ start: number; end: number; total: number; channels: Item[] }>(
+    cached<{ start: number; end: number; total: number; channels: Item[] }>(
       `${S}/guide?category=${enc(p.category)}&start=${p.start}&hours=${p.hours}&offset=${p.offset}&limit=${p.limit}`,
+      60_000,
     ),
-  channelEpg: (id: string) => api.get<{ programmes: Programme[] }>(`${S}/channel/${enc(id)}/epg`),
+  channelEpg: (id: string) => cached<{ programmes: Programme[] }>(`${S}/channel/${enc(id)}/epg`, 60_000),
   search: (q: string) => api.get<{ live: Item[]; movie: Item[]; series: Item[]; programmes: (Programme & { channel_id: string; channel_name: string; logo?: string })[] }>(`${S}/search?q=${enc(q)}`),
   vod: (id: string) => api.get<VodInfo>(`${S}/vod/${enc(id)}`),
   tmdbKey: (key: string) => api.post<{ tmdb: boolean }>(`${S}/tmdb`, { key }),

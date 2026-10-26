@@ -39,14 +39,23 @@ CREATE TABLE IF NOT EXISTS channels (
   PRIMARY KEY (account, id));
 CREATE INDEX IF NOT EXISTS ch_cat ON channels (account, category, position);
 CREATE INDEX IF NOT EXISTS ch_epg ON channels (account, epg_id);
+CREATE INDEX IF NOT EXISTS ch_pos ON channels (account, position);
 CREATE TABLE IF NOT EXISTS vod (
   account TEXT, id TEXT, name TEXT, norm TEXT, logo TEXT, category TEXT, rating REAL, year INTEGER, added INTEGER,
   ext TEXT, url TEXT, position INTEGER, PRIMARY KEY (account, id));
 CREATE INDEX IF NOT EXISTS vod_cat ON vod (account, category, position);
+CREATE INDEX IF NOT EXISTS vod_pos ON vod (account, position);
+CREATE INDEX IF NOT EXISTS vod_added ON vod (account, added);
+CREATE INDEX IF NOT EXISTS vod_rating ON vod (account, rating);
+CREATE INDEX IF NOT EXISTS vod_year ON vod (account, year);
 CREATE TABLE IF NOT EXISTS series (
   account TEXT, id TEXT, name TEXT, norm TEXT, logo TEXT, category TEXT, rating REAL, year INTEGER, plot TEXT,
   added INTEGER, position INTEGER, PRIMARY KEY (account, id));
 CREATE INDEX IF NOT EXISTS series_cat ON series (account, category, position);
+CREATE INDEX IF NOT EXISTS series_pos ON series (account, position);
+CREATE INDEX IF NOT EXISTS series_added ON series (account, added);
+CREATE INDEX IF NOT EXISTS series_rating ON series (account, rating);
+CREATE INDEX IF NOT EXISTS series_year ON series (account, year);
 CREATE TABLE IF NOT EXISTS series_info (account TEXT, id TEXT, data TEXT, fetched REAL, PRIMARY KEY (account, id));
 CREATE TABLE IF NOT EXISTS epg (
   account TEXT, channel TEXT, start INTEGER, stop INTEGER, title TEXT, norm TEXT, descr TEXT, category TEXT,
@@ -72,6 +81,7 @@ CREATE TABLE IF NOT EXISTS variants (
   account TEXT, type TEXT, id TEXT, grp TEXT, quality TEXT, rank INTEGER, rep_all INTEGER, rep_cat INTEGER,
   pos_all INTEGER, pos_cat INTEGER, PRIMARY KEY (account, type, id));
 CREATE INDEX IF NOT EXISTS variants_grp ON variants (account, type, grp);
+CREATE INDEX IF NOT EXISTS variants_all ON variants (account, type, rep_all, pos_all);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, profile TEXT, account TEXT, channel TEXT, channel_name TEXT, title TEXT, start REAL, fired INTEGER DEFAULT 0);
 """
@@ -111,6 +121,7 @@ class Store:
         c = self.conn()
         with self.write_lock:
             c.executescript(DDL)
+            c.execute("PRAGMA optimize=0x10002")  # statistiques des index à jour (rapide : seulement si utile)
             c.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(SCHEMA),))
             if not c.execute("SELECT 1 FROM profiles LIMIT 1").fetchone():
                 c.execute("INSERT INTO profiles VALUES (?, ?, NULL, 0, ?, ?)", ("main", "Moi", "#F1B9B2", time.time()))
