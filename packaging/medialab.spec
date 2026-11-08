@@ -5,7 +5,7 @@
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parent
 BACKEND = ROOT / "backend"
@@ -28,6 +28,8 @@ datas = [(str(DIST_UI), "frontend/dist")]
 datas += collect_data_files("webview")
 datas += collect_data_files("yt_dlp_ejs")
 datas += collect_data_files("certifi")
+# version of the bundled yt-dlp, read at launch to know whether a downloaded engine is newer
+datas += copy_metadata("yt-dlp")
 datas += [(str(BACKEND / "medialab" / "stream" / "fonts"), "medialab/stream/fonts")]  # polices du bandeau du lecteur
 datas += [(str(BACKEND / "medialab" / "stream" / "remote.html"), "medialab/stream")]  # page de la télécommande (téléphone)
 binaries = collect_dynamic_libs("pillow_heif") + collect_dynamic_libs("curl_cffi")

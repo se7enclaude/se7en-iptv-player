@@ -411,6 +411,15 @@ export interface Component {
   path?: string | null;
   version?: string | null;
   size?: number;
+  /** missing | up_to_date | update_available | restart_required | unknown */
+  state?: string;
+  latest?: string | null;
+  checked_at?: string | null;
+  installed_at?: string | null;
+  pinned?: boolean;
+  external?: boolean;
+  pending_version?: string | null;
+  runtime?: string | null;
   models?: { id: string; file: string; size: number; license: string; author: string; noncommercial: boolean; installed: boolean; purpose: string }[];
 }
 

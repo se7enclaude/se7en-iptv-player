@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Info,
   Package,
+  RefreshCw,
   Settings2,
   SlidersHorizontal,
   TriangleAlert,
@@ -14,10 +15,10 @@ import {
 } from "lucide-react";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import type { Settings, UpdateState } from "../api/types";
+import type { Component, Settings, UpdateState } from "../api/types";
 import { Button, Notice, PageHead, Progress, Segmented, Select, Switch } from "../components/ui";
 import { useT } from "../i18n";
-import { bytes, relative } from "../lib/format";
+import { bytes, dateTime, relative } from "../lib/format";
 import { play } from "../lib/sounds";
 import { useApp } from "../store/app";
 import { Wordmark } from "../components/TopBar";
@@ -191,24 +192,71 @@ function Components() {
   const comps = useApp((s) => s.components);
   const progress = useApp((s) => s.componentProgress);
   const load = useApp((s) => s.loadComponents);
+  const [checking, setChecking] = useState(false);
   useEffect(() => {
     load();
   }, [load]);
+  const shown = comps.filter((c) => SHOWN_COMPONENTS.includes(c.id));
+  const checkedAt = shown.find((c) => c.checked_at)?.checked_at;
+  const when = (iso?: string | null) => (iso ? dateTime(Date.parse(iso) / 1000) : "");
+  const updates = shown.filter((c) => c.state === "update_available").length;
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      const r = await api.post<Component[]>("/api/components/check");
+      useApp.setState({ components: r });
+    } catch {
+      /* offline: the previous result stays on screen */
+    } finally {
+      setChecking(false);
+    }
+  };
   return (
     <>
-      {comps.filter((c) => SHOWN_COMPONENTS.includes(c.id)).map((c) => {
+      <div className="row comp-check" style={{ gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+        <span className={updates ? "chip accent" : "chip success"} style={{ height: 22 }}>
+          {updates ? t("components.updatesAvailable", { n: updates }) : t("components.allUpToDate")}
+        </span>
+        <span className="faint" style={{ fontSize: 12, flex: 1 }}>
+          {checkedAt ? t("components.lastCheck", { when: when(checkedAt) }) : t("components.neverChecked")}
+        </span>
+        <Button size="sm" variant="ghost" loading={checking} icon={<RefreshCw size={14} />} onClick={checkNow}>
+          {t("components.checkNow")}
+        </Button>
+      </div>
+      {shown.map((c) => {
         const p = progress[c.id];
         const busy = p && ["starting", "downloading", "extracting"].includes(p.state);
+        const state = c.state ?? (c.installed ? "unknown" : "missing");
+        const ok = state === "up_to_date";
+        const status =
+          state === "up_to_date"
+            ? c.external
+              ? t("components.upToDateExternal", { version: c.version ?? "" })
+              : c.pinned
+                ? t("components.upToDatePinned", { version: c.version ?? "" })
+                : t("components.upToDate", { version: c.version ?? "", when: when(c.checked_at) })
+            : state === "update_available"
+              ? t("components.updateAvailable", { version: c.version ?? "?", latest: c.latest ?? "?" })
+              : state === "restart_required"
+                ? t("components.restartPending", { latest: c.pending_version ?? c.latest ?? "" })
+                : state === "missing"
+                  ? t("components.notInstalled")
+                  : c.checked_at
+                    ? t("components.unknownVersion", { version: c.version ?? "" })
+                    : t("components.notChecked", { version: c.version ?? "" });
         return (
           <div key={c.id} className="comp">
             <div className={`comp-icon ${c.installed ? "ok" : c.optional ? "" : "warn"}`}>{c.installed ? <CheckCircle2 size={18} /> : <Package size={18} />}</div>
             <div style={{ minWidth: 0 }}>
-              <div className="row" style={{ gap: 8 }}>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                 <b>{c.name}</b>
-                {c.version && <span className="chip" style={{ height: 20 }}>{c.version}</span>}
+                {ok && <span className="chip success" style={{ height: 20 }}>{t("components.upToDateChip")}</span>}
+                {state === "update_available" && <span className="chip accent" style={{ height: 20 }}>{t("components.updateChip")}</span>}
                 {!c.installed && !c.optional && <span className="chip" style={{ height: 20, color: "var(--warning)" }}>{t("components.required", { what: c.required_for })}</span>}
                 {c.optional && <span className="chip" style={{ height: 20 }}>{t("components.optional")}</span>}
               </div>
+              <div style={{ fontSize: 12, marginTop: 2, color: state === "update_available" || state === "restart_required" ? "var(--accent)" : ok ? "var(--success)" : undefined }}>{status}</div>
               <div className="faint" style={{ fontSize: 12 }}>{t.or(`component.${c.id}.desc`, c.description)}</div>
               {c.path && <div className="faint mono ellipsis" style={{ fontSize: 10.5 }}>{c.path}</div>}
               {c.id === "aipack" && c.models && (
@@ -232,11 +280,12 @@ function Components() {
                   </div>
                 </div>
               )}
-              {p?.state === "restart_required" && <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 4 }}>{t("components.restart")}</div>}
             </div>
-            <Button size="sm" variant={c.installed ? "default" : "primary"} loading={busy} icon={<DownloadIcon size={14} />} onClick={() => api.post(`/api/components/${c.id}/install`)}>
-              {c.installed ? t("components.update") : t("components.install")}
-            </Button>
+            {(state === "missing" || state === "update_available" || busy) && (
+              <Button size="sm" variant="primary" loading={busy} icon={<DownloadIcon size={14} />} onClick={() => api.post(`/api/components/${c.id}/install`)}>
+                {state === "missing" ? t("components.install") : t("components.update")}
+              </Button>
+            )}
           </div>
         );
       })}
