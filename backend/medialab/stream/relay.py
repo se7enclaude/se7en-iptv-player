@@ -29,7 +29,7 @@ log = get_logger("relay")
 PASS_HEADERS = ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "ETag")
 
 
-def _open(url: str, user_agent: str, rng: str | None, timeout: float = 20.0):
+def _open(url: str, user_agent: str, rng: str | None, timeout: float = 7.0):
     """GET ``url`` (redirections suivies). Renvoie (connexion, réponse)."""
     for _ in range(6):
         u = urlsplit(url)
@@ -63,8 +63,9 @@ class Relay:
     def __init__(self) -> None:
         self._srv: ThreadingHTTPServer | None = None
         self._targets: dict[str, tuple[str, str]] = {}
-        self._gate = threading.Lock()  # une ouverture à la fois
+        self._gate = threading.Lock()  # une ouverture à la fois (seulement le temps d'une tentative)
         self._lock = threading.Lock()
+        self._gen = 0  # numéro de la dernière demande du lecteur : une demande plus ancienne abandonne ses essais
         self._active: tuple | None = None  # (socket fournisseur, socket lecteur) de la lecture en cours
         self.opened = 0  # connexions ouvertes vers le fournisseur (tests)
 
@@ -124,11 +125,21 @@ class Relay:
         url, ua = target
         rng = h.headers.get("Range")
         conn = resp = None
-        with self._gate:
-            self.abort()  # d'abord fermer, ensuite ouvrir : le fournisseur ne voit jamais deux connexions
-            # un serveur Xtream met souvent 1 à 3 s à compter l'ancienne connexion comme fermée : il refuse la nouvelle
-            # (403) en attendant. On réessaie pendant ~7 s avant d'abandonner (au lieu d'une erreur « connexion perdue »).
-            for attempt in range(8):
+        with self._lock:
+            self._gen += 1
+            gen = self._gen
+        self.abort()  # d'abord fermer, ensuite ouvrir : le fournisseur ne voit jamais deux connexions
+        # un serveur Xtream met souvent 1 à 3 s à compter l'ancienne connexion comme fermée : il refuse la nouvelle
+        # (403) en attendant. On réessaie pendant ~7 s avant d'abandonner (au lieu d'une erreur « connexion perdue »).
+        # Le verrou ne couvre qu'une tentative (pas les attentes entre deux) et une demande plus récente (saut, zap)
+        # fait abandonner celle-ci : elle n'attend plus la fin de 8 essais.
+        stale = False
+        for attempt in range(8):
+            with self._gate:
+                if self._gen != gen:
+                    stale = True
+                    break
+                self.abort()  # une lecture ouverte entre-temps (demande plus ancienne) : fermée d'abord
                 try:
                     conn, resp = _open(url, ua, rng)
                     self.opened += 1
@@ -136,21 +147,33 @@ class Relay:
                     log.debug("relay open: %s", e)
                     conn = resp = None
                 if resp is not None and resp.status < 400:
+                    with self._lock:
+                        if self._gen == gen:
+                            self._active = (conn.sock, h.connection)
+                        else:
+                            stale = True
+                    if stale:
+                        conn.close()
+                        conn = resp = None
                     break
                 status = resp.status if resp is not None else None
                 if conn:
                     conn.close()
                 conn = resp = None
-                if status == 404:
-                    break
-                time.sleep(min(1.5, 0.3 * (attempt + 1)))
-                log.info("Relais : le serveur refuse encore (%s), nouvel essai %d", status, attempt + 2)
-            if resp is None:
+            if status == 404:
+                break
+            time.sleep(min(1.5, 0.3 * (attempt + 1)))
+            log.info("Relais : le serveur refuse encore (%s), nouvel essai %d", status, attempt + 2)
+        if resp is None:
+            if stale:
+                log.debug("Relais : demande remplacée par une plus récente")
+            else:
                 log.warning("Relais : le serveur refuse le film %s", redact(url))
+            try:
                 h.send_error(502)
-                return
-            with self._lock:
-                self._active = (conn.sock, h.connection)
+            except OSError:
+                pass
+            return
         try:
             h.send_response(resp.status)
             for k in PASS_HEADERS:

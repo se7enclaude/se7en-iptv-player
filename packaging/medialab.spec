@@ -22,12 +22,13 @@ hidden = (
     + collect_submodules("curl_cffi")
     + collect_submodules("websockets")
     + ["webview.platforms.edgechromium", "webview.platforms.winforms", "clr", "pynvml", "multipart",
-       "onnxruntime", "pillow_heif", "mpv", "cryptography"]
+       "onnxruntime", "pillow_heif", "mpv", "cryptography", "tzdata"]
 )
 datas = [(str(DIST_UI), "frontend/dist")]
 datas += collect_data_files("webview")
 datas += collect_data_files("yt_dlp_ejs")
 datas += collect_data_files("certifi")
+datas += collect_data_files("tzdata")  # fuseaux horaires (replay à l'heure du serveur), absents de Windows
 # version of the bundled yt-dlp, read at launch to know whether a downloaded engine is newer
 datas += copy_metadata("yt-dlp")
 datas += [(str(BACKEND / "medialab" / "stream" / "fonts"), "medialab/stream/fonts")]  # polices du bandeau du lecteur

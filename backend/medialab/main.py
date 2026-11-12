@@ -164,6 +164,7 @@ def _main(argv: list[str] | None = None) -> int:
         try:
             server.run()
         finally:
+            system.run_quit_callbacks(timeout=20)  # enregistrements, lecteur, télécommande, relais
             cleanup()
         return 0
 
@@ -223,6 +224,9 @@ def _main(argv: list[str] | None = None) -> int:
         else:
             _run_browser(url, services, log, bus)
     finally:
+        # arrêt de l'enregistreur (FFmpeg finit ses fichiers), du lecteur, de la télécommande et du relais : pas
+        # seulement lors d'une mise à jour, à chaque fermeture (une seule fois)
+        system.run_quit_callbacks(timeout=20)
         services.jobs.shutdown()  # pause running tasks first: partial work stays resumable
         server.should_exit = True
         t.join(timeout=5)

@@ -1044,25 +1044,41 @@ def register(app: FastAPI, S) -> None:
             bus.publish("stream_sync", {"account": aid, "percent": frac * 100, "label": label})
         what = opts.get("what", "all")
         counts = {}
-        if what in ("all", "catalog"):
-            try:
-                counts = sync.sync_catalog(store, account, lambda f, l: progress(f * (0.6 if what == "all" else 1), l), jctx.cancel)
-            except BaseException:
-                bus.publish("stream_sync", {"account": aid, "done": True, "failed": True})
-                raise
         epg = 0
-        if what in ("all", "epg"):
-            try:
-                epg = sync.sync_epg(store, store.account(aid), lambda f, l: progress((0.6 if what == "all" else 0) + f * (0.4 if what == "all" else 1), l), jctx.cancel)
-            except MediaLabError as e:
-                log.warning("EPG failed for %s: %s", aid, e.message)
-                bus.publish("stream_sync", {"account": aid, "warning": e.message})
-        threading.Thread(target=search_index.warm, args=(store, aid), name="search-warm", daemon=True).start()
-        bus.publish("stream_sync", {"account": aid, "done": True, "counts": counts, "epg": epg})
+        ok = False
+        # quoi qu'il arrive (erreur inattendue, annulation…), « done » est publié : sinon l'indicateur de mise à jour
+        # de l'interface resterait affiché pour toujours
+        try:
+            if what in ("all", "catalog"):
+                counts = sync.sync_catalog(store, account, lambda f, l: progress(f * (0.6 if what == "all" else 1), l), jctx.cancel)
+            if what in ("all", "epg"):
+                try:
+                    epg = sync.sync_epg(store, store.account(aid), lambda f, l: progress((0.6 if what == "all" else 0) + f * (0.4 if what == "all" else 1), l), jctx.cancel)
+                except Canceled:
+                    raise
+                except MediaLabError as e:
+                    log.warning("EPG failed for %s: %s", aid, e.message)
+                    bus.publish("stream_sync", {"account": aid, "warning": e.message})
+                except Exception as e:  # noqa: BLE001 - réseau, guide illisible… le catalogue reste bon
+                    log.warning("EPG failed for %s: %r", aid, e)
+                    bus.publish("stream_sync", {"account": aid, "warning": "Le guide des programmes n'a pas pu être mis à jour."})
+            ok = True
+        finally:
+            bus.publish("stream_sync", {"account": aid, "done": True, "counts": counts, "epg": epg} if ok
+                        else {"account": aid, "done": True, "failed": True})
+        search_index.warm_later(store, aid)
         return {"file_path": None, "title": account["name"], "platform": "stream", "format": f"{sum(v or 0 for v in counts.values())} entrées",
                 "meta": {"account": aid, "epg": epg}}
 
     S.jobs.register_worker("stream_sync", worker, lambda: 2)
+    # mises à jour interrompues par la fermeture de l'appli (gardées « en pause ») : on les oublie, la mise à jour
+    # automatique les relance si besoin (sinon l'indicateur de synchro attendrait une tâche qui ne repart jamais)
+    try:
+        for j in S.jobs.db.list_jobs(["paused"]):
+            if j.get("kind") == "stream_sync":
+                S.jobs.db.delete_job(j["id"])
+    except Exception:  # noqa: BLE001
+        log.exception("stream_sync cleanup")
 
     def auto_refresh() -> None:
         time.sleep(4)
@@ -1088,5 +1104,6 @@ def register(app: FastAPI, S) -> None:
     threading.Thread(target=auto_refresh, name="stream-refresh", daemon=True).start()
 
     from .. import system
-    system.on_quit(lambda: (rec.shutdown(), player.shutdown(), remote.stop(), relay.stop()))
+    for stop in (rec.shutdown, player.shutdown, remote.stop, relay.stop):  # chacun le sien : une erreur ne saute pas les autres
+        system.on_quit(stop)
     app.state.stream = {"store": store, "session": sess, "player": player, "recorder": rec, "connections": conns}

@@ -22,3 +22,5 @@ anthropic>=1.9
 mpv>=1.0.8
 # sauvegarde chiffrée (AES-256-GCM)
 cryptography>=43
+# fuseaux horaires (zoneinfo) : Windows n'a pas de base IANA, sans elle les heures du replay sont décalées
+tzdata>=2024.1

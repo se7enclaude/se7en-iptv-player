@@ -232,7 +232,8 @@ def create_app(services: Services) -> FastAPI:
         bus.add_listener(_on_event)
         log.info("%s %s started (portable=%s, frozen=%s, data=%s)", APP_NAME, __version__, is_portable(),
                  is_frozen(), paths().data)
-        threading.Thread(target=_warmup, daemon=True).start()
+        # (plus de préchargement yt-dlp / encodeurs / Vulkan : inutiles au lecteur IPTV, ils ralentissaient le
+        # lancement et le premier zap)
         updater.note_launch()
         if services.shell or is_frozen():
             updater.start_background(_auto_update)
@@ -253,16 +254,6 @@ def create_app(services: Services) -> FastAPI:
         if ev["type"] == "update" and ev["data"].get("state") == "available" and _auto_update():
             # Download in the background; it is installed on the next restart (or right away on demand).
             threading.Thread(target=updater.auto_download, daemon=True).start()
-
-    def _warmup() -> None:
-        # Pre-load heavy things so the first analyze/upscale feels instant.
-        try:
-            registry.detect("https://www.youtube.com/watch?v=aqz-KE-bpKQ")
-            if components.find_binary("ffmpeg"):
-                ffmpeg.working_encoders()
-            engine.BACKENDS["ncnn"].devices()
-        except Exception as e:
-            log.debug("warmup: %s", e)
 
     app = FastAPI(title=APP_NAME, version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.services = services

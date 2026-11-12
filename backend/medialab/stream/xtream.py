@@ -336,8 +336,8 @@ def server_tz(server_info: dict) -> dt.tzinfo:
         try:
             from zoneinfo import ZoneInfo
             return ZoneInfo(name)
-        except Exception:  # noqa: BLE001 - fuseau inconnu
-            pass
+        except Exception as e:  # noqa: BLE001 - fuseau inconnu (ou base tzdata absente sous Windows)
+            log.warning("Unknown server timezone %r (%s): replay times may be shifted", name, e)
     m = re.match(r"^(?:UTC|GMT)?\s*([+-])(\d{1,2}):?(\d{2})?$", name)
     if m:
         delta = dt.timedelta(hours=int(m.group(2)), minutes=int(m.group(3) or 0))

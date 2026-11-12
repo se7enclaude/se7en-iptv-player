@@ -26,7 +26,10 @@ export function GuidePage() {
   const [rows, setRows] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
   const [pick, setPick] = useState<{ ch: Item; p: Programme } | null>(null);
-  const busy = useRef(false);
+  // requêtes en vol : la dernière grille demandée gagne (catégorie, heure) ; une suite ne s'ajoute qu'à la grille
+  // qu'elle prolonge
+  const gen = useRef(0);
+  const appending = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
   const end = start + HOURS * 3600;
 
@@ -35,16 +38,18 @@ export function GuidePage() {
   }, [version]);
 
   const load = useCallback(async (offset: number) => {
-    if (busy.current) return;
-    busy.current = true;
+    if (offset && appending.current) return;
+    const id = offset ? gen.current : ++gen.current;
+    if (offset) appending.current = true;
     try {
       const r = await stream.guide({ category: cat, start, hours: HOURS, offset, limit: 60 });
+      if (id !== gen.current) return;
       setTotal(r.total);
-      setRows((cur) => (offset ? [...cur, ...r.channels] : r.channels));
+      setRows((cur) => (!offset ? r.channels : cur.length === offset ? [...cur, ...r.channels] : cur));
     } catch (e) {
-      toastError(e);
+      if (id === gen.current) toastError(e);
     } finally {
-      busy.current = false;
+      if (offset) appending.current = false;
     }
   }, [cat, start]);
 

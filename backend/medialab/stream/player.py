@@ -605,6 +605,8 @@ class Player:
         self._spare: dict | None = None
         self.fullscreen = False
         self.last_pos = 0.0  # dernière position connue (pour reprendre au même endroit après une coupure)
+        self._retry_pending = False  # une relance attend déjà (évite d'en lancer deux pour la même coupure)
+        self._restart_at = 0.0  # dernier redémarrage de l'image (playback-restart)
         self.menu: str | None = None  # liste ouverte au-dessus des bulles : "aid" (audio) ou "sid" (sous-titres)
         self.hover: tuple[float, float] | None = None  # souris sur la vidéo, en coordonnées du bandeau (1920 × 1080)
 
@@ -650,6 +652,9 @@ class Player:
         self._bind_inputs(m)
         m.observe_property("eof-reached", lambda _n, v: v and m is self.mpv and self._ended())
         m.event_callback("end-file")(lambda ev: m is self.mpv and self._end_file(ev))
+        # l'image repart : la coupure est passée, le compteur d'essais repart de zéro (sinon 6 coupures en une soirée
+        # suffiraient à abandonner pour de bon) ; s'il recoupe aussitôt (< 20 s), on garde le compte (pas de boucle sans fin)
+        m.event_callback("playback-restart")(lambda _ev: m is self.mpv and self._restarted())
         return m
 
     # ---------------------------------------------------------------- zapping instantané
@@ -1113,8 +1118,18 @@ class Player:
     # ---------------------------------------------------------------- fin, erreurs, reconnexion
     def _ended(self) -> None:
         self._save_progress()
-        if self.item and self.item.get("kind") in ("movie", "episode"):
+        kind = (self.item or {}).get("kind")
+        if kind in ("movie", "episode"):
             bus.publish("player", {"event": "ended", "item": self.item})
+        elif kind == "live" and not self.stopped_by_user and self.url:
+            # keep_open=yes : une chaîne qui coupe n'émet que eof-reached (pas end-file) et resterait figée
+            self._retry("eof")
+        elif kind == "replay" and not self.stopped_by_user and self.url:
+            # replay coupé avant la fin du programme : on reprend où on en était (fin normale : rien à faire)
+            it = self.item or {}
+            length = float(it.get("stop") or 0) - float(it.get("start") or 0)
+            if length <= 0 or self.last_pos < length - 30:
+                self._retry("eof")
 
     def _end_file(self, ev) -> None:
         try:
@@ -1128,28 +1143,48 @@ class Player:
         if self.stopped_by_user or not self.item or not self.url:
             return
         if "error" in name or (name == "eof" and self.item.get("kind") == "live"):
-            if self.retries < 6:
-                self.retries += 1
-                delay = min(8, 1.5 * self.retries)
-                code, when = getattr(self, "last_http", (0, 0.0))
-                if code and time.monotonic() - when < 30:
-                    why = ("Le serveur refuse la connexion (abonnement déjà utilisé ailleurs ?)" if code in (401, 403, 429, 458, 509)
-                           else f"Le serveur ne répond pas ({code})")
-                else:
-                    why = "Le flux s'est coupé"
-                self.flash(f"{why} · nouvel essai ({self.retries}/6)", delay + 1)
-                log.warning("Stream ended (%s), retry %d in %.1fs: %s", name, self.retries, delay, redact(self.url))
+            self._retry(name)
 
-                at = self.last_pos if self.item.get("kind") in ("movie", "episode") else 0
+    def _restarted(self) -> None:
+        self._restart_at = time.monotonic()
 
-                def retry(url=self.url, item_id=(self.item or {}).get("id")):
+    def _retry(self, name: str) -> None:
+        """Relance le flux après une coupure (6 essais, de plus en plus espacés)."""
+        if self.stopped_by_user or not self.item or not self.url:
+            return
+        if self._retry_pending:  # eof-reached et end-file pour la même coupure : une seule relance
+            return
+        if self._restart_at and time.monotonic() - self._restart_at > 20:
+            self.retries = 0  # la lecture avait bien repris depuis la dernière coupure
+        self._restart_at = 0.0
+        if self.retries < 6:
+            self.retries += 1
+            delay = min(8, 1.5 * self.retries)
+            code, when = getattr(self, "last_http", (0, 0.0))
+            if code and time.monotonic() - when < 30:
+                why = ("Le serveur refuse la connexion (abonnement déjà utilisé ailleurs ?)" if code in (401, 403, 429, 458, 509)
+                       else f"Le serveur ne répond pas ({code})")
+            else:
+                why = "Le flux s'est coupé"
+            self.flash(f"{why} · nouvel essai ({self.retries}/6)", delay + 1)
+            log.warning("Stream ended (%s), retry %d in %.1fs: %s", name, self.retries, delay, redact(self.url))
+
+            at = self.last_pos if self.item.get("kind") in ("movie", "episode", "replay") else 0
+            self._retry_pending = True
+
+            def retry(url=self.url, item_id=(self.item or {}).get("id")):
+                try:
                     time.sleep(delay)
                     if self.url == url and (self.item or {}).get("id") == item_id and not self.stopped_by_user:
                         self.mpv.loadfile(url, "replace", **({"start": f"{at:.1f}"} if at > 5 else {}))
-                threading.Thread(target=retry, daemon=True).start()
-            else:
-                self.flash("Le flux ne répond plus.", 8)
-                bus.publish("player", {"event": "error", "message": "Le flux ne répond plus : le serveur est peut-être saturé."})
+                except Exception:  # noqa: BLE001
+                    log.exception("Retry failed")
+                finally:
+                    self._retry_pending = False
+            threading.Thread(target=retry, daemon=True).start()
+        else:
+            self.flash("Le flux ne répond plus.", 8)
+            bus.publish("player", {"event": "error", "message": "Le flux ne répond plus : le serveur est peut-être saturé."})
 
     def shutdown(self) -> None:
         try:

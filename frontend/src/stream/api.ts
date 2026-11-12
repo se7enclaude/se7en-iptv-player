@@ -1,7 +1,8 @@
 import { api as client } from "../api/client";
 
 /* Lists (catalogue, categories, guide, home) are kept a short while: going back to a page shows it at once instead of
- * asking the engine again. Any change (POST / PATCH / DELETE, a catalogue update, a profile switch) empties the memo. */
+ * asking the engine again. Any change (POST / PATCH / DELETE, a catalogue update, a profile switch) empties the memo,
+ * except the writes that change no list (player commands, video rectangle, account test…): see `quiet`. */
 const memo = new Map<string, { t: number; p: Promise<unknown> }>();
 export function clearCache(): void {
   memo.clear();
@@ -21,6 +22,8 @@ const api = {
   del: <T = any>(...a: Parameters<typeof client.del>) => (clearCache(), client.del<T>(...a)),
   put: <T = any>(...a: Parameters<typeof client.put>) => (clearCache(), client.put<T>(...a)),
 };
+/** Writes that change no cached list: the memo is kept (a seek or a volume step no longer reloads the pages). */
+const quiet = { post: client.post, put: client.put };
 
 export type Kind = "live" | "movie" | "series";
 
@@ -303,7 +306,7 @@ const enc = encodeURIComponent;
 export const stream = {
   state: () => api.get<StreamState>(`${S}/state`),
   home: () => cached<Home>(`${S}/home`, 30_000),
-  testAccount: (f: Partial<AccountForm>) => api.post<TestResult>(`${S}/accounts/test`, f),
+  testAccount: (f: Partial<AccountForm>) => quiet.post<TestResult>(`${S}/accounts/test`, f),
   addAccount: (f: Partial<AccountForm>) => api.post<{ account: Account; summary: TestResult }>(`${S}/accounts`, f),
   editAccount: (id: string, f: Partial<AccountForm>) => api.patch<Account>(`${S}/accounts/${id}`, f),
   deleteAccount: (id: string) => api.del(`${S}/accounts/${id}`),
@@ -326,7 +329,7 @@ export const stream = {
   vod: (id: string) => api.get<VodInfo>(`${S}/vod/${enc(id)}`),
   tmdbKey: (key: string) => api.post<{ tmdb: boolean }>(`${S}/tmdb`, { key }),
   remote: () => api.get<RemoteInfo>(`${S}/remote`),
-  setRemote: (enabled: boolean, reset = false) => api.post<RemoteInfo>(`${S}/remote`, { enabled, reset }),
+  setRemote: (enabled: boolean, reset = false) => quiet.post<RemoteInfo>(`${S}/remote`, { enabled, reset }),
   series: (id: string, refresh = false) => api.get<SeriesInfo>(`${S}/series/${enc(id)}?refresh=${refresh}`),
   favorite: (type: string, item: string, on: boolean) => api.post(`${S}/favorite`, { type, item, on }),
   hide: (type: string, item: string, on: boolean) => api.post(`${S}/hidden`, { type, item, on }),
@@ -334,9 +337,9 @@ export const stream = {
   watched: (type: string, item: string, on: boolean) => api.post(`${S}/watched`, { type, item, on }),
   play: (b: { type: string; id: string; start?: number; stop?: number; title?: string; series?: string; resume?: boolean }) =>
     api.post<{ item: PlayerState["item"]; resumed_at?: number }>(`${S}/play`, b),
-  rect: (r: { x: number; y: number; w: number; h: number; dpr: number; visible: boolean; radius: number }) => api.put(`${S}/player/rect`, r),
+  rect: (r: { x: number; y: number; w: number; h: number; dpr: number; visible: boolean; radius: number }) => quiet.put(`${S}/player/rect`, r),
   player: () => api.get<PlayerState>(`${S}/player`),
-  cmd: (cmd: string, value?: unknown) => api.post<{ ok?: boolean; on?: boolean; folder?: string }>(`${S}/player`, { cmd, value }),
+  cmd: (cmd: string, value?: unknown) => quiet.post<{ ok?: boolean; on?: boolean; folder?: string }>(`${S}/player`, { cmd, value }),
   recordings: () => api.get<{ recordings: Recording[]; folder: string }>(`${S}/recordings`),
   record: (b: { channel: string; title?: string; start?: number; stop?: number; minutes?: number; source?: string }) => api.post<Recording>(`${S}/recordings`, b),
   stopRecording: (id: string) => api.post(`${S}/recordings/${id}/stop`),
@@ -355,6 +358,6 @@ export const stream = {
   parentalPin: (pin: string, new_pin: string) => api.post(`${S}/parental/pin`, { pin, new_pin }),
   settings: () => api.get<StreamSettings>(`${S}/settings`),
   saveSettings: (p: Partial<StreamSettings>) => api.patch<StreamSettings>(`${S}/settings`, p),
-  exportBackup: (path: string, password: string) => api.post<{ path: string; accounts: number }>(`${S}/backup/export`, { path, password }),
+  exportBackup: (path: string, password: string) => quiet.post<{ path: string; accounts: number }>(`${S}/backup/export`, { path, password }),
   importBackup: (path: string, password: string) => api.post<{ accounts: number }>(`${S}/backup/import`, { path, password }),
 };

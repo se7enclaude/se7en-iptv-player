@@ -41,11 +41,11 @@ def test_urls_and_redaction():
     assert c.movie_url(7, "mkv").endswith("/movie/us%20er/p%40ss%2Fw/7.mkv")
     assert c.episode_url(9, ".mp4").endswith("/series/us%20er/p%40ss%2Fw/9.mp4")
     c.server_info = {"timezone": "Europe/Paris"}
-    start = 1_792_000_000  # UTC
+    start = 1_800_014_400  # 15/01/2027 12:00 UTC : Paris en hiver = UTC+1, donc 13:00 à l'heure du serveur
     url = c.timeshift_url(5, start, 45)
-    local = X.to_server_time(start, c.server_info)
-    assert f"/timeshift/us%20er/p%40ss%2Fw/45/{local:%Y-%m-%d:%H-%M}/5.ts" in url
-    assert X.redact(url) == url.split("/timeshift/")[0] + f"/timeshift/***/***/45/{local:%Y-%m-%d:%H-%M}/5.ts"
+    assert "/timeshift/us%20er/p%40ss%2Fw/45/2027-01-15:13-00/5.ts" in url
+    assert X.redact(url) == url.split("/timeshift/")[0] + "/timeshift/***/***/45/2027-01-15:13-00/5.ts"
+    assert X.to_server_time(1_784_116_800, c.server_info).hour == 14  # 15/07/2026 12:00 UTC : heure d'été = UTC+2
     assert "s3cret" not in X.redact("http://a/xmltv.php?username=demo&password=s3cret")
     c.close()
 
@@ -194,6 +194,31 @@ def test_sync_and_browse(store, monkeypatch):
     assert with_now[1]["now"] and with_now[1]["now"]["title"].startswith("Prog")
     g = catalog.guide(store, a["id"], "main", False, "__all", int(time.time()) - 1800, hours=3, limit=10)
     assert len(g["channels"]) == 10 and g["channels"][1]["programmes"]
+    # zapping : seulement les identifiants, dans l'ordre de la liste
+    assert catalog.group_ids(store, a["id"], "live", "main", False, "1", "") == \
+        [i["id"] for i in catalog.items(store, a["id"], "live", "main", False, "1", limit=500)["items"]]
+
+
+def test_failed_epg_download_keeps_the_old_guide(store, monkeypatch):
+    app = make_app(channels=10, vod=1, series=1)
+    a = add_fake_account(store, app)
+    _, n = run_sync(store, app, a, monkeypatch)
+    assert n > 0
+
+    def broken(url, ua):
+        raise MediaLabError("epg_failed", "Le guide des programmes n'a pas pu être téléchargé (502).")
+    monkeypatch.setattr(sync, "_open_url", broken)
+    with pytest.raises(MediaLabError):
+        sync.sync_epg(store, store.account(a["id"]), lambda f, l: None)
+    assert store.one("SELECT COUNT(*) AS n FROM epg WHERE account=?", (a["id"],))["n"] == n
+
+    class Cut(io.BytesIO):  # le guide coupé au milieu du téléchargement (erreur réseau)
+        def read(self, k=-1):
+            raise OSError("connexion perdue")
+    monkeypatch.setattr(sync, "_open_url", lambda url, ua: Cut(b""))
+    with pytest.raises(OSError):
+        sync.sync_epg(store, store.account(a["id"]), lambda f, l: None)
+    assert store.one("SELECT COUNT(*) AS n FROM epg WHERE account=?", (a["id"],))["n"] == n
 
 
 def test_favorites_hidden_history(store, monkeypatch):

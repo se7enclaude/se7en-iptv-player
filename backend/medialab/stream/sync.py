@@ -213,19 +213,22 @@ def sync_epg(store: Store, account: dict, progress: Progress, cancel=None) -> in
     count = 0
     t0 = time.monotonic()
 
+    # le nouveau guide est d'abord rangé à part (epg_new) : l'ancien reste affiché tant que le nouveau n'est pas
+    # entièrement lu, puis on échange les deux d'un coup (un téléchargement raté ne vide plus le guide)
     def flush(final: bool = False) -> None:
         nonlocal rows
         if rows and (final or len(rows) >= 5000):
-            store.many("INSERT OR REPLACE INTO epg VALUES (?,?,?,?,?,?,?,?)", rows)
+            store.many("INSERT OR REPLACE INTO epg_new VALUES (?,?,?,?,?,?,?,?)", rows)
             rows = []
 
+    raw = _open_url(url, account.get("user_agent") or "")
     with store.write_lock:
-        store.conn().execute("DELETE FROM epg WHERE account=?", (aid,))
-        store.conn().commit()
-    try:
-        raw = _open_url(url, account.get("user_agent") or "")
-    except MediaLabError:
-        raise
+        c = store.conn()
+        c.execute("CREATE TABLE IF NOT EXISTS epg_new (account TEXT, channel TEXT, start INTEGER, stop INTEGER, "
+                  "title TEXT, norm TEXT, descr TEXT, category TEXT, PRIMARY KEY (account, channel, start))")
+        c.execute("DELETE FROM epg_new WHERE account=?", (aid,))
+        c.commit()
+    done = False
     try:
         for kind, item in xmltv.parse(raw, since, until):
             _check(cancel)
@@ -249,13 +252,26 @@ def sync_epg(store: Store, account: dict, progress: Progress, cancel=None) -> in
                 flush()
                 progress(min(0.95, 0.1 + (time.monotonic() - t0) / 120), f"Guide : {count} programmes")
         flush(final=True)
+        done = True
     except xmltv.Broken as e:
         flush(final=True)
         if not count:
             raise
         log.warning("EPG for %s cut short after %d programmes: %s", aid, count, e.detail)
+        done = True
     finally:
         raw.close()
+        with store.write_lock:
+            c = store.conn()
+            try:
+                if done:  # remplacement en une seule transaction
+                    c.execute("DELETE FROM epg WHERE account=?", (aid,))
+                    c.execute("INSERT OR REPLACE INTO epg SELECT * FROM epg_new WHERE account=?", (aid,))
+                c.execute("DELETE FROM epg_new WHERE account=?", (aid,))
+                c.commit()
+            except Exception:
+                c.rollback()
+                raise
     store.update_account(aid, epg_synced=time.time())
     progress(1.0, f"Guide à jour : {count} programmes")
     log.info("EPG for %s: %d programmes from %s", aid, count, redact(url))

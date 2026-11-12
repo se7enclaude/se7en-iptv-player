@@ -60,7 +60,7 @@ def categories(store: Store, aid: str, typ: str, profile: str, show_adult: bool)
 
 def items(store: Store, aid: str, typ: str, profile: str, show_adult: bool, category: str = "__all",
           search: str = "", offset: int = 0, limit: int = 200, sort: str = "default", quality: str = "",
-          only: list[str] | None = None) -> dict:
+          only: list[str] | None = None, ids_only: bool = False) -> dict:
     """Une page de la liste. ``quality`` (« best », « fhd », « hd »…) : une seule version par groupe SD / HD / FHD / 4K,
     la plus proche de cette préférence, avec les autres dans ``variants`` ; vide = toutes les versions à la suite."""
     table = TABLE[typ]
@@ -119,12 +119,18 @@ def items(store: Store, aid: str, typ: str, profile: str, show_adult: bool, cate
         else:
             src = f"FROM {table} t LEFT JOIN variants v ON v.account=t.account AND v.type=? AND v.id=t.id WHERE {sql_where}"
             gparams = [typ] + params
+        if ids_only:  # zapping : seulement l'ordre des identifiants (ni total, ni versions, ni programme en cours)
+            return {"total": None, "items": store.q(f"SELECT t.id {src} ORDER BY {order} LIMIT ? OFFSET ?",
+                                                    gparams + order_params + [lim, offset])}
         total = _count(store, aid, profile, f"SELECT COUNT(*) AS n {src}", gparams) if category != "__fav" else \
             store.one(f"SELECT COUNT(*) AS n {src}", gparams)["n"]
         rows = store.q(f"SELECT t.*, v.grp, v.quality {src} ORDER BY {order} LIMIT ? OFFSET ?",
                        gparams + order_params + [lim, offset])
         _attach_variants(store, aid, typ, profile, rows)
     else:
+        if ids_only:
+            return {"total": None, "items": store.q(f"SELECT t.id FROM {table} t WHERE {sql_where} ORDER BY {order} "
+                                                    "LIMIT ? OFFSET ?", params + order_params + [lim, offset])}
         csql = f"SELECT COUNT(*) AS n FROM {table} t WHERE {sql_where}"
         total = _count(store, aid, profile, csql, params) if category != "__fav" else store.one(csql, params)["n"]
         rows = store.q(f"SELECT t.* FROM {table} t WHERE {sql_where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -165,7 +171,8 @@ def _attach_variants(store: Store, aid: str, typ: str, profile: str, rows: list[
 
 def group_ids(store: Store, aid: str, typ: str, profile: str, show_adult: bool, category: str, quality: str) -> list[str]:
     """Les éléments d'une catégorie dans l'ordre de la liste (une version par groupe) : pour zapper ↑ ↓."""
-    return [r["id"] for r in items(store, aid, typ, profile, show_adult, category, limit=100_000, quality=quality)["items"]]
+    return [r["id"] for r in items(store, aid, typ, profile, show_adult, category, limit=100_000, quality=quality,
+                                   ids_only=True)["items"]]
 
 
 def group_of(store: Store, aid: str, typ: str, item: str) -> list[str]:
@@ -181,8 +188,10 @@ def _attach_now(store: Store, aid: str, rows: list[dict]) -> None:
     ids = [r["epg_id"] for r in rows if r.get("epg_id")]
     if not ids:
         return
+    # start borné aussi par le bas (un programme dure moins d'un jour) : l'index (account, start) ne parcourt plus
+    # tout le passé du guide
     progs = store.q(f"SELECT channel, start, stop, title FROM epg WHERE account=? AND channel IN ({','.join('?' * len(ids))}) "
-                    "AND stop>? AND start<? ORDER BY start", [aid] + ids + [now, now + 6 * 3600])
+                    "AND start>? AND stop>? AND start<? ORDER BY start", [aid] + ids + [now - 86400, now, now + 6 * 3600])
     nowmap: dict[str, dict] = {}
     nextmap: dict[str, dict] = {}
     for p in progs:

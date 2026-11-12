@@ -8,12 +8,12 @@ import { PlayerState, stream } from "./api";
 import { clock } from "./components";
 import { toastError, useStream } from "./store";
 
-/** Polls the player once a second while something plays. */
-export function usePlayerState(): PlayerState | null {
+/** Polls the player once a second while something plays (`enabled` false: does nothing). */
+export function usePlayerState(enabled = true): PlayerState | null {
   const now = useStream((s) => s.now);
   const [st, setSt] = useState<PlayerState | null>(null);
   useEffect(() => {
-    if (!now) {
+    if (!now || !enabled) {
       setSt(null);
       return;
     }
@@ -25,7 +25,7 @@ export function usePlayerState(): PlayerState | null {
       alive = false;
       window.clearInterval(t);
     };
-  }, [now]);
+  }, [now, enabled]);
   return st;
 }
 
@@ -59,9 +59,26 @@ const LANG: Record<string, string> = { fr: "Français", fre: "Français", fra: "
 
 const cmd = (c: string, v?: unknown) => stream.cmd(c, v).catch(toastError);
 
-export function PlayerControls({ st, live, extra }: { st: PlayerState | null; live?: boolean; extra?: ReactNode }) {
+/** Without `st`, the controls poll the player themselves: only they re-render each second, not the whole page. */
+export function PlayerControls({ st: given, live, extra }: { st?: PlayerState | null; live?: boolean; extra?: ReactNode }) {
+  const polled = usePlayerState(given === undefined);
+  const st = given === undefined ? polled : given;
   const toast = useApp((s) => s.toast);
   const [stats, setStats] = useState(false);
+  // seek bar: the position follows the drag, the jump is asked only once, on release (not at every step)
+  const [drag, setDrag] = useState<number | null>(null);
+  const dragTimer = useRef(0);
+  const unsent = useRef<number | null>(null);
+  useEffect(() => () => window.clearTimeout(dragTimer.current), []);
+  const commitSeek = () => {
+    const v = unsent.current;
+    if (v == null) return;
+    unsent.current = null;
+    cmd("seek_to", v);
+    window.clearTimeout(dragTimer.current);
+    dragTimer.current = window.setTimeout(() => setDrag(null), 1200); // until the player reports the new position
+  };
+  const shown = drag ?? st?.position ?? 0;
   const playing = !!st?.playing;
   const audio = st?.tracks?.filter((t) => t.type === "audio") ?? [];
   const subs = st?.tracks?.filter((t) => t.type === "sub") ?? [];
@@ -75,9 +92,11 @@ export function PlayerControls({ st, live, extra }: { st: PlayerState | null; li
         <Button iconOnly icon={st?.paused ? <Play size={17} /> : <Pause size={17} />} tip="Lecture / pause (Espace)" disabled={!playing} onClick={() => cmd("pause")} />
         {seekable && (
           <div className="st-seek">
-            <span className="mono">{clock(st?.position)}</span>
-            <input type="range" min={0} max={Math.max(1, st?.duration ?? 1)} step={1} value={st?.position ?? 0} onChange={(e) => cmd("seek_to", Number(e.target.value))}
-              style={{ "--p": `${Math.min(100, ((st?.position ?? 0) / Math.max(1, st?.duration ?? 1)) * 100)}%` } as CSSProperties} />
+            <span className="mono">{clock(shown)}</span>
+            <input type="range" min={0} max={Math.max(1, st?.duration ?? 1)} step={1} value={shown}
+              onChange={(e) => { window.clearTimeout(dragTimer.current); unsent.current = Number(e.target.value); setDrag(unsent.current); }}
+              onPointerUp={commitSeek} onKeyUp={commitSeek} onBlur={commitSeek}
+              style={{ "--p": `${Math.min(100, (shown / Math.max(1, st?.duration ?? 1)) * 100)}%` } as CSSProperties} />
             <span className="mono">{clock(st?.duration)}</span>
           </div>
         )}

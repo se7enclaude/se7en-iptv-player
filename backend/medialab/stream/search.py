@@ -15,6 +15,7 @@ from .store import Store, norm
 KINDS = ("live", "movie", "series")
 _lock = threading.Lock()
 _cache: dict[tuple[str, str], "_Index"] = {}
+_building: dict[tuple[str, str], threading.Lock] = {}  # un seul calcul à la fois par index (les autres attendent)
 
 
 @dataclass
@@ -43,6 +44,16 @@ def _index(store: Store, aid: str, typ: str) -> _Index:
         idx = _cache.get((aid, typ))
         if idx and idx.stamp == stamp:
             return idx
+        build = _building.setdefault((aid, typ), threading.Lock())
+    with build:  # deux préparations en même temps (lancement + fin de mise à jour) calculaient deux fois le même index
+        with _lock:
+            idx = _cache.get((aid, typ))
+            if idx and idx.stamp == stamp:
+                return idx
+        return _build(store, aid, typ, stamp)
+
+
+def _build(store: Store, aid: str, typ: str, stamp: float) -> _Index:
     idx = _Index(stamp)
     for k, r in enumerate(store.q(f"SELECT id, name FROM {catalog.TABLE[typ]} WHERE account=?", (aid,))):
         n = _clean(r["name"])
@@ -59,8 +70,15 @@ def _index(store: Store, aid: str, typ: str) -> _Index:
 def warm(store: Store, aid: str) -> None:
     """Prépare l'index de recherche d'un compte (au lancement et après une mise à jour du catalogue) : la première
     recherche ne prend plus 2 à 3 s sur un gros catalogue."""
+    # lancées en même temps (lancement + fin de mise à jour), deux préparations ne calculent pas deux fois le même
+    # index : la seconde attend la première (verrou par index) puis reprend son résultat
     for typ in catalog.TABLE:
         _index(store, aid, typ)
+
+
+def warm_later(store: Store, aid: str) -> None:
+    """warm() en arrière-plan."""
+    threading.Thread(target=warm, args=(store, aid), name="search-warm", daemon=True).start()
 
 
 def _close(a: str, b: str, limit: int) -> bool:

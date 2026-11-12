@@ -164,7 +164,10 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
   const [total, setTotal] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [unlock, setUnlock] = useState(false);
-  const busy = useRef(false);
+  // requêtes en vol : la dernière liste demandée gagne (catégorie, tri, recherche) ; une suite ne s'ajoute qu'à la
+  // liste qu'elle prolonge
+  const gen = useRef(0);
+  const appending = useRef(false);
   const grid = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -172,16 +175,18 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
   }, [kind, version]);
 
   const load = useCallback(async (offset: number) => {
-    if (busy.current) return;
-    busy.current = true;
+    if (offset && appending.current) return;
+    const id = offset ? gen.current : ++gen.current;
+    if (offset) appending.current = true;
     try {
       const r = await stream.items(kind, { category: cat, q, offset, limit: 120, sort });
+      if (id !== gen.current) return;
       setTotal(r.total);
-      setItems((cur) => (offset ? [...cur, ...r.items] : r.items));
+      setItems((cur) => (!offset ? r.items : cur.length === offset ? [...cur, ...r.items] : cur));
     } catch (e) {
-      toastError(e);
+      if (id === gen.current) toastError(e);
     } finally {
-      busy.current = false;
+      if (offset) appending.current = false;
     }
   }, [kind, cat, q, sort]);
 

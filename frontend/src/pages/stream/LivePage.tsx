@@ -1,12 +1,12 @@
 import clsx from "clsx";
 import { AlarmClock, Archive, CircleDot, EyeOff, History, Lock, Search, Star, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty } from "../../components/ui";
 import { useApp } from "../../store/app";
 import { Category, isOf, Item, Programme, stream } from "../../stream/api";
 import { QualityPicker } from "../../stream/components";
 import { Bar, Logo, UnlockModal, VideoSurface, VirtualList, day, hm, progressOf, toggleFav, useNow } from "../../stream/components";
-import { PlayerControls, RecordNow, usePlayerState } from "../../stream/PlayerControls";
+import { PlayerControls, RecordNow } from "../../stream/PlayerControls";
 import { toastError, useStream } from "../../stream/store";
 
 const ROW = 64;
@@ -60,7 +60,8 @@ function ChannelRow({ ch, on, onClick, onFav, now }: { ch: Item; on: boolean; on
   );
 }
 
-function ChannelGuide({ ch, now }: { ch: Item; now: number }) {
+// memo : la page se redessine (liste, zapping…) sans refaire la liste des programmes tant que la chaîne ne change pas
+const ChannelGuide = memo(function ChannelGuide({ ch, now }: { ch: Item; now: number }) {
   const toast = useApp((s) => s.toast);
   const play = useStream((s) => s.play);
   const setPage = useApp((s) => s.setPage);
@@ -134,7 +135,7 @@ function ChannelGuide({ ch, now }: { ch: Item; now: number }) {
       })}
     </div>
   );
-}
+});
 
 export function LivePage() {
   const nowTs = useNow(30000);
@@ -144,30 +145,54 @@ export function LivePage() {
   const playing = useStream((s) => s.now);
   const play = useStream((s) => s.play);
   const theater = useStream((s) => s.theater);
-  const st = usePlayerState();
   const [cats, setCats] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Item | null>(null);
   const [unlock, setUnlock] = useState(false);
-  const loading = useRef(false);
+  // requêtes en vol : chaque nouvelle liste (catégorie, recherche) a son numéro et seule la dernière s'affiche ; une
+  // suite de liste (défilement) ne s'ajoute que si elle suit bien la liste affichée
+  const gen = useRef(0);
+  const appending = useRef(false);
+  const itemsRef = useRef<Item[]>([]);
+  itemsRef.current = items;
 
   useEffect(() => {
     stream.categories("live").then((r) => setCats(r.categories)).catch(toastError);
   }, [version]);
 
   const load = useCallback(async (offset: number) => {
-    if (loading.current) return;
-    loading.current = true;
+    if (offset && appending.current) return;
+    const id = offset ? gen.current : ++gen.current;
+    if (offset) appending.current = true;
     try {
       const r = await stream.items("live", { category, q, offset, limit: 300 });
+      if (id !== gen.current) return; // une liste plus récente a été demandée entre-temps
       setTotal(r.total);
-      setItems((cur) => (offset ? [...cur, ...r.items] : r.items));
+      setItems((cur) => (!offset ? r.items : cur.length === offset ? [...cur, ...r.items] : cur));
     } catch (e) {
-      toastError(e);
+      if (id === gen.current) toastError(e);
     } finally {
-      loading.current = false;
+      if (offset) appending.current = false;
+    }
+  }, [category, q]);
+
+  // programme en cours rafraîchi : toutes les lignes déjà chargées (pas seulement les 300 premières, sinon la liste
+  // raccourcissait et ↑ ↓ zappait depuis la mauvaise chaîne)
+  const refresh = useCallback(async () => {
+    const id = gen.current;
+    const n = Math.max(300, itemsRef.current.length);
+    try {
+      const pages = await Promise.all(Array.from({ length: Math.ceil(n / 300) }, (_, k) =>
+        stream.items("live", { category, q, offset: k * 300, limit: 300 })));
+      if (id !== gen.current || appending.current) return;
+      const fresh = pages.flatMap((p) => p.items);
+      setTotal(pages[0].total);
+      setItems(fresh);
+      setSelected((cur) => (cur ? fresh.find((x) => x.id === cur.id) ?? cur : cur));
+    } catch {
+      /* la prochaine fois */
     }
   }, [category, q]);
 
@@ -176,11 +201,11 @@ export function LivePage() {
     return () => window.clearTimeout(t);
   }, [load, q, version]);
 
-  // refresh "now playing" lines every minute
+  // refresh "now playing" lines every two minutes
   useEffect(() => {
-    const t = window.setInterval(() => load(0), 120000);
+    const t = window.setInterval(refresh, 120000);
     return () => window.clearInterval(t);
-  }, [load]);
+  }, [refresh]);
 
   const current = useMemo(() => (playing?.kind === "live" ? playing.id : null), [playing]);
   const index = items.findIndex((c) => (selected ? c.id === selected.id : isOf(c, current)));
@@ -258,7 +283,7 @@ export function LivePage() {
       </section>
       <section className="st-col st-col-main">
         <VideoSurface className="st-live-video" />
-        <PlayerControls st={st} live extra={sel && <RecordNow channel={sel.id} title={sel.now?.title} />} />
+        <PlayerControls live extra={sel && <RecordNow channel={sel.id} title={sel.now?.title} />} />
         {sel ? (
           <div className="st-now glass-panel">
             <div className="st-now-head">

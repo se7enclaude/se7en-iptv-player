@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Callable
 
@@ -19,6 +20,7 @@ from ..components import CREATE_NO_WINDOW, require
 from ..errors import MediaLabError
 from ..events import bus
 from ..logging_setup import get_logger
+from ..system import kill_with_app
 from .store import Store
 from .xtream import redact
 
@@ -27,6 +29,20 @@ log = get_logger("recorder")
 
 def default_folder() -> Path:
     return Path.home() / "Videos" / "se7en IPTV Player"
+
+
+def _drain(pipe, tail: deque) -> None:
+    """Lit la sortie d'erreur de FFmpeg jusqu'au bout (n'en garde que la fin)."""
+    try:
+        for line in iter(pipe.readline, b""):
+            tail.append(line)
+    except Exception:  # noqa: BLE001 - tuyau fermé
+        pass
+    finally:
+        try:
+            pipe.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def safe(name: str) -> str:
@@ -208,6 +224,13 @@ class Recorder:
         log.info("Recording %s → %s (%s)", r["id"], out.name, redact(url))
         p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                              creationflags=CREATE_NO_WINDOW)
+        kill_with_app(p)  # FFmpeg ne survit pas à l'appli (fermeture brutale, plantage)
+        # les erreurs de FFmpeg sont lues au fil de l'eau : lues seulement à la fin, elles rempliraient le tuyau
+        # (4 Ko sous Windows) pendant un long enregistrement qui se reconnecte souvent, et FFmpeg resterait bloqué
+        p.err_tail = deque(maxlen=64)  # type: ignore[attr-defined]
+        p.err_reader = threading.Thread(target=_drain, args=(p.stderr, p.err_tail), name=f"rec-stderr-{r['id']}",  # type: ignore[attr-defined]
+                                        daemon=True)
+        p.err_reader.start()  # type: ignore[attr-defined]
         self.procs[r["id"]] = p
 
     def _end(self, rid: str, status: str) -> None:
@@ -221,11 +244,9 @@ class Recorder:
                 p.kill()
         r = self.get(rid)
         err = None
-        if p is not None and p.stderr is not None:
-            try:
-                err = p.stderr.read().decode("utf-8", "replace")[-400:] or None
-            except Exception:  # noqa: BLE001
-                err = None
+        if p is not None and getattr(p, "err_tail", None) is not None:
+            p.err_reader.join(timeout=2)
+            err = b"".join(p.err_tail).decode("utf-8", "replace")[-400:] or None
         size = Path(r["file"]).stat().st_size if r["file"] and Path(r["file"]).exists() else 0
         if size == 0:
             status = "failed"
