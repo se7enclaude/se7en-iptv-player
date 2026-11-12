@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.1.8": {
+        "fr": ["Corrigé : une chaîne qui se coupe repart toute seule au lieu de rester figée, et un replay coupé reprend là où il en était.", "Corrigé : les replays ne sont plus décalés d'une heure.", "Corrigé : si la mise à jour du guide des programmes échoue, l'ancien guide est gardé (il ne se vide plus).", "Zapping plus rapide, et l'appli démarre plus vite.", "Quand tu fermes l'appli, le lecteur, les enregistrements et FFmpeg s'arrêtent proprement."],
+        "en": ["Fixed: a channel that cuts out restarts on its own instead of freezing, and an interrupted replay resumes where it was.", "Fixed: replays are no longer one hour off.", "Fixed: if the programme guide update fails, the old guide is kept (it no longer goes empty).", "Faster channel switching, and the app starts faster.", "When you close the app, the player, recordings and FFmpeg stop cleanly."],
+    },
     "1.1.7": {
         "fr": ["Composants : chacun affiche « À jour (version X, vérifié le …) » ou « Mise à jour disponible » (le lecteur vidéo (libmpv) et FFmpeg). Un composant à jour n'est plus jamais retéléchargé, et l'appli te prévient quand une nouvelle version sort (vérification toutes les 12 h).", "Corrigé : une mise à jour de FFmpeg ou de Deno était téléchargée mais pas utilisée (le bouton retéléchargeait en boucle).", "Corrigé : un ancien yt-dlp téléchargé pouvait masquer le yt-dlp plus récent fourni avec l'appli."],
         "en": ["Components: each one shows \"Up to date (version X, checked on …)\" or \"Update available\". A component that is up to date is never downloaded again, and the app tells you when a new version is out (checked every 12 h).", "Fixed: an FFmpeg or Deno update was downloaded but not used (the button downloaded it again and again).", "Fixed: an old downloaded yt-dlp could hide the newer one shipped with the app."],

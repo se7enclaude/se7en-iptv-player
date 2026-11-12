@@ -1,7 +1,10 @@
-## se7en IPTV Player 1.1.7
+## se7en IPTV Player 1.1.8
 
-- **Composants à jour, clairement** : chaque composant (le lecteur vidéo (libmpv) et FFmpeg) affiche « À jour (version X, vérifié le …) » ou « Mise à jour disponible ». Un composant à jour n'est plus jamais retéléchargé, et l'appli te prévient quand une nouvelle version sort.
-- **Corrigé** : une mise à jour de FFmpeg ou de Deno était téléchargée mais pas utilisée (le bouton retéléchargeait en boucle) ; un ancien yt-dlp pouvait masquer le plus récent.
+- **Corrigé** : une chaîne qui se coupe repart toute seule au lieu de rester figée, et un replay coupé reprend là où il en était.
+- **Corrigé** : les replays ne sont plus décalés d'une heure.
+- **Corrigé** : si la mise à jour du guide des programmes échoue, l'ancien guide est gardé (il ne se vide plus).
+- **Plus rapide** : le zapping et le démarrage de l'appli.
+- **Arrêt propre** : quand tu fermes l'appli, le lecteur, les enregistrements et FFmpeg s'arrêtent avec elle.
 
 Tes listes, tes favoris et tes réglages sont gardés.
 
