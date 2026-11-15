@@ -1,9 +1,8 @@
-## se7en IPTV Player 1.1.9
+## se7en IPTV Player 1.2.0
 
-- **Plus fluide** : les affiches et les logos sont téléchargés une seule fois, réduits à la taille affichée et gardés sur ton PC. Le défilement des films ne saccade plus (mesuré sur un écran 240 Hz), et tout s'affiche tout de suite au lancement suivant.
-- **Fondu** : les affiches apparaissent en douceur au lieu de surgir.
-- **Onglets instantanés** : Accueil, Films, Séries et Guide restent en mémoire ; tu retrouves ta liste à l'endroit où tu l'avais laissée.
-- **Corrigé** : sur un gros catalogue (100 000 films), la liste des films pouvait mettre 0,3 s par page ; elle répond maintenant en quelques millisecondes. Le tri par nom est aussi instantané.
+- **Toutes les versions** : sur la fiche d'un film ou d'une série, le bouton « Toutes les versions » montre le même titre dans toutes les langues du catalogue (Français, Anglais, Espagnol, Arabe, Turc…) et toutes ses qualités (4K UHD, 1080p, Blu-ray, HEVC…). Un clic ouvre la version, ▶ la lance.
+- **Sous-titres pour tout** : quand la vidéo n'a pas de sous-titres dans ta langue, l'appli les trouve sur OpenSubtitles et les ajoute toute seule (deux par langue, l'anglais en secours). Si le film est dans une autre langue que la tienne, le premier s'affiche directement.
+- **Corrigé** : un enregistrement pouvait finir en des dizaines de morceaux identiques quand le fournisseur renvoyait sa courte vidéo d'attente. Les copies ne sont plus gardées, les essais s'espacent, l'appli te dit pourquoi si ça dure, et les morceaux sont réunis en un seul fichier à la fin.
 
 Tes listes, tes favoris et tes réglages sont gardés.
 

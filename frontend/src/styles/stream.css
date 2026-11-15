@@ -540,3 +540,21 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 
 /* grilles de films / séries : les affiches hors de l'écran ne sont ni mises en page ni dessinées (milliers d'affiches) */
 .st-grid > .st-poster { content-visibility: auto; contain-intrinsic-size: auto 274px; }
+
+/* « Toutes les versions » (stream/Details.tsx) : langues et qualités du même titre */
+.st-versions { border-radius: var(--radius-lg); background: var(--liquid-sheen), rgba(255, 255, 255, .06); box-shadow: inset 0 1px 1px rgba(255, 255, 255, .25); }
+.st-versions-toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; border: 0; background: transparent; color: var(--text-primary); font: var(--fw-medium) 13px/1.2 var(--font-sans); cursor: pointer; text-align: left; }
+.st-versions-toggle:disabled { cursor: default; color: var(--text-tertiary); }
+.st-versions-toggle b { font-weight: var(--fw-semibold); }
+.st-versions-chev { margin-left: auto; transition: transform var(--dur-fast) var(--ease-out); }
+.st-versions.open .st-versions-chev { transform: rotate(180deg); }
+.st-versions-list { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 14px; }
+.st-versions-lang { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: start; }
+.st-versions-lang-name { font: var(--fw-semibold) 12.5px/28px var(--font-sans); color: var(--text-secondary); }
+.st-versions-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-version { display: inline-flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px 4px 12px; border-radius: 999px; border: 1px solid var(--white-a16); background: var(--white-a06); color: var(--text-secondary); font: var(--fw-semibold) 12px/1.2 var(--font-sans); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); }
+.st-version:hover { background: var(--white-a12); color: var(--text-primary); }
+.st-version.on { background: #fff; border-color: #fff; color: var(--ink-950); }
+.st-version-video { font: var(--fw-regular) 11px/1 var(--font-mono, monospace); opacity: .7; }
+.st-version-play { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .9); color: var(--ink-950); cursor: pointer; }
+.st-version.on .st-version-play { background: var(--ink-950); color: #fff; }

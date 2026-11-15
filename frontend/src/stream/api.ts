@@ -207,6 +207,24 @@ export interface SeriesInfo extends Item, Rich {
   seasons: { season: string; episodes: Episode[] }[];
 }
 
+/** Une version d'un film / d'une série : langue, qualité, marques (Blu-ray, HEVC, Light, VOST…). */
+export interface WorkVersion {
+  id: string;
+  name: string;
+  logo?: string | null;
+  year?: number | null;
+  category?: string | null;
+  lang: string;
+  lang_label: string;
+  quality: string;
+  rank: number;
+  tags: string[];
+  video: string;
+  current: boolean;
+  verified: boolean;
+  fav: boolean;
+}
+
 export interface VodInfo extends Item, Rich {
   duration?: string;
   release?: string;
@@ -338,6 +356,8 @@ export const stream = {
   channelEpg: (id: string) => cached<{ programmes: Programme[] }>(`${S}/channel/${enc(id)}/epg`, 60_000),
   search: (q: string) => api.get<{ live: Item[]; movie: Item[]; series: Item[]; programmes: (Programme & { channel_id: string; channel_name: string; logo?: string })[] }>(`${S}/search?q=${enc(q)}`),
   vod: (id: string) => api.get<VodInfo>(`${S}/vod/${enc(id)}`),
+  versions: (type: "movie" | "series", id: string) =>
+    api.get<{ tmdb: string | null; imdb?: string | null; versions: WorkVersion[] }>(`${S}/versions/${type}/${enc(id)}`),
   tmdbKey: (key: string) => api.post<{ tmdb: boolean }>(`${S}/tmdb`, { key }),
   remote: () => api.get<RemoteInfo>(`${S}/remote`),
   setRemote: (enabled: boolean, reset = false) => quiet.post<RemoteInfo>(`${S}/remote`, { enabled, reset }),

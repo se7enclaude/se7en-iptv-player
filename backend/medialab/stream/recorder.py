@@ -1,12 +1,17 @@
 """Enregistrements : FFmpeg en copie de flux (aucun réencodage), programmés depuis le guide ou lancés à la main.
 
 - un enregistrement programmé démarre un peu avant le début du programme et finit un peu après ;
-- si le flux coupe, FFmpeg est relancé et la suite est écrite dans un nouveau morceau ;
+- si le flux coupe, FFmpeg est relancé et la suite est écrite dans un nouveau morceau ; à la fin, les morceaux sont
+  réunis en un seul fichier ;
+- certains fournisseurs répondent par une courte vidéo toujours identique (connexion refusée, « trop de connexions ») :
+  elle n'est pas gardée en double, les essais s'espacent, et l'enregistrement s'arrête en le disant si ça dure ;
 - le fichier est un .ts (lisible même si l'enregistrement s'arrête brutalement) dans Vidéos\\se7en IPTV Player ;
 - chaque enregistrement compte comme une connexion : on refuse s'il dépasse la limite de l'abonnement.
 """
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import subprocess
 import threading
@@ -25,6 +30,38 @@ from .store import Store
 from .xtream import redact
 
 log = get_logger("recorder")
+
+RETRY_DELAYS = (10, 20, 40, 60)   # secondes entre deux essais quand le direct « finit » tout de suite
+FAST_END = 30                     # un direct qui « finit » en moins de 30 s n'était pas le direct
+MAX_SAME = 8                      # tant d'essais d'affilée sur la même vidéo : on abandonne en expliquant pourquoi
+SAME_VIDEO = ("Le fournisseur renvoie toujours la même courte vidéo au lieu de la chaîne "
+              "(souvent : trop de connexions en même temps, ou chaîne indisponible).")
+
+
+def file_digest(path: Path) -> str | None:
+    """Empreinte d'un morceau (taille + début, milieu et fin : rapide même sur un gros fichier). None s'il est vide."""
+    try:
+        size = path.stat().st_size
+        if not size:
+            return None
+        h = hashlib.sha1(str(size).encode())
+        with open(path, "rb") as f:
+            for pos in (0, max(0, size // 2 - 512 * 1024), max(0, size - 1024 * 1024)):
+                f.seek(pos)
+                h.update(f.read(1024 * 1024))
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def parts_of(main: Path) -> list[Path]:
+    """Le fichier principal puis ses morceaux « … partie 2.ts », « … partie 3.ts »… dans l'ordre."""
+    found = []
+    prefix = f"{main.stem} partie "
+    for p in main.parent.iterdir() if main.parent.exists() else []:
+        if p.suffix == main.suffix and p.stem.startswith(prefix) and p.stem[len(prefix):].isdigit():
+            found.append((int(p.stem[len(prefix):]), p))
+    return ([main] if main.exists() else []) + [p for _k, p in sorted(found)]
 
 
 def default_folder() -> Path:
@@ -98,6 +135,8 @@ class Recorder:
         self.resolve = resolve
         self.folder = folder
         self.procs: dict[str, subprocess.Popen] = {}
+        # par enregistrement : empreintes des morceaux gardés, essais ratés d'affilée, heure du prochain essai
+        self.retry: dict[str, dict] = {}
         self.lock = threading.RLock()
         self._stop = threading.Event()
         # au démarrage, ce qui était « en cours » a été interrompu par la fermeture de l'appli
@@ -179,6 +218,14 @@ class Recorder:
                     self._end(r["id"], "done")
                 elif p is not None and p.poll() is not None:
                     if r["source"] == "live" and r["stop"] - now > 20:
+                        st = self.retry.setdefault(r["id"], {"seen": set(), "fails": 0, "next": 0.0, "checked": None})
+                        if st["checked"] is not p:  # ce morceau vient de finir : jugé une seule fois
+                            st["checked"] = p
+                            self._judge_part(r, p, st, now)
+                            if r["id"] not in self.procs:  # abandon (toujours la même vidéo)
+                                continue
+                        if now < st["next"]:
+                            continue
                         log.warning("Recording %s: stream dropped (code %s), restarting", r["id"], p.returncode)
                         self._spawn(self.get(r["id"]), part=True)
                     else:
@@ -204,6 +251,31 @@ class Recorder:
         self._spawn(self.get(r["id"]))
         bus.publish("stream_recordings", {})
 
+    def _judge_part(self, r: dict, p, st: dict, now: float) -> None:
+        """Un morceau vient de finir. Vide, ou copie d'un morceau déjà gardé : effacé. S'il a « fini » très vite, ce
+        n'était pas le direct (vidéo d'attente du fournisseur) : le prochain essai attend de plus en plus longtemps."""
+        out = getattr(p, "out", None)
+        fast = now - getattr(p, "started", now) < FAST_END
+        digest = file_digest(out) if out else None
+        dup = digest is None or digest in st["seen"]
+        if dup and out is not None and out != Path(r["file"]):
+            try:
+                out.unlink()
+            except OSError:
+                pass
+        elif digest:
+            st["seen"].add(digest)
+        if fast and digest:
+            st.setdefault("junk", set()).add(digest)  # vidéo d'attente : retirée au moment d'assembler
+        if fast or dup:
+            st["fails"] += 1
+            st["next"] = now + RETRY_DELAYS[min(st["fails"] - 1, len(RETRY_DELAYS) - 1)]
+            if st["fails"] >= MAX_SAME and dup:
+                log.warning("Recording %s: provider keeps sending the same short video, giving up", r["id"])
+                self._end(r["id"], "failed", reason=SAME_VIDEO)
+        else:
+            st["fails"], st["next"] = 0, 0.0
+
     def _spawn(self, r: dict, part: bool = False) -> None:
         url, ua, _mx = self.resolve(r)
         out = Path(r["file"])
@@ -225,6 +297,8 @@ class Recorder:
         p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                              creationflags=CREATE_NO_WINDOW)
         kill_with_app(p)  # FFmpeg ne survit pas à l'appli (fermeture brutale, plantage)
+        p.out = out  # type: ignore[attr-defined]
+        p.started = time.time()  # type: ignore[attr-defined]
         # les erreurs de FFmpeg sont lues au fil de l'eau : lues seulement à la fin, elles rempliraient le tuyau
         # (4 Ko sous Windows) pendant un long enregistrement qui se reconnecte souvent, et FFmpeg resterait bloqué
         p.err_tail = deque(maxlen=64)  # type: ignore[attr-defined]
@@ -233,8 +307,9 @@ class Recorder:
         p.err_reader.start()  # type: ignore[attr-defined]
         self.procs[r["id"]] = p
 
-    def _end(self, rid: str, status: str) -> None:
+    def _end(self, rid: str, status: str, reason: str | None = None) -> None:
         p = self.procs.pop(rid, None)
+        junk = (self.retry.pop(rid, None) or {}).get("junk") or set()
         if p is not None and p.poll() is None:
             try:
                 p.stdin.write(b"q")  # FFmpeg finit proprement le fichier
@@ -247,11 +322,16 @@ class Recorder:
         if p is not None and getattr(p, "err_tail", None) is not None:
             p.err_reader.join(timeout=2)
             err = b"".join(p.err_tail).decode("utf-8", "replace")[-400:] or None
+        if r["file"]:
+            try:
+                join_parts(Path(r["file"]), junk)
+            except Exception as e:  # noqa: BLE001 — les morceaux restent, lisibles un par un
+                log.warning("Recording %s: parts not joined: %s", rid, e)
         size = Path(r["file"]).stat().st_size if r["file"] and Path(r["file"]).exists() else 0
         if size == 0:
             status = "failed"
-        self.store.run("UPDATE recordings SET status=?, size=?, error=? WHERE id=?",
-                       (status, size, (redact(err) if err and status == "failed" else None), rid))
+        msg = reason or (redact(err) if err and status == "failed" else None)
+        self.store.run("UPDATE recordings SET status=?, size=?, error=? WHERE id=?", (status, size, msg, rid))
         self.conns.release(r["account"], f"rec:{rid}")
         bus.publish("stream_recordings", {"done": rid})
 
@@ -259,3 +339,42 @@ class Recorder:
         self._stop.set()
         for rid in list(self.procs):
             self._end(rid, "interrupted")
+
+
+def join_parts(main: Path, junk: set[str] | frozenset = frozenset()) -> None:
+    """Réunit « film.ts », « film partie 2.ts »… en un seul « film.ts » (copie de flux, sans réencodage). Les morceaux
+    vides ou identiques à un autre (même empreinte) ne sont gardés qu'une fois ; ceux de ``junk`` (vidéo d'attente du
+    fournisseur, reconnue pendant l'enregistrement) sont retirés, sauf s'il ne reste qu'eux."""
+    every = parts_of(main)
+    if all(file_digest(p) in junk for p in every):
+        junk = frozenset()
+    parts, seen = [], set()
+    for p in every:
+        d = file_digest(p)
+        if d is None or d in seen or d in junk:
+            if p != main:
+                p.unlink(missing_ok=True)
+            continue
+        seen.add(d)
+        parts.append(p)
+    if len(parts) < 2:
+        if parts and parts[0] != main:
+            os.replace(parts[0], main)
+        return
+    tmp = main.with_name(main.stem + " (assemblage).ts")
+    lst = main.with_name(main.stem + " (assemblage).txt")
+    quote = lambda s: "'" + s.replace("'", "'\\''") + "'"  # noqa: E731 — guillemets du format concat de FFmpeg
+    lst.write_text("".join(f"file {quote(str(p))}\n" for p in parts), encoding="utf-8")
+    try:
+        subprocess.run([require("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                        "-i", str(lst), "-map", "0", "-c", "copy", "-ignore_unknown", "-f", "mpegts", str(tmp)],
+                       check=True, timeout=1800, creationflags=CREATE_NO_WINDOW, capture_output=True)
+        if not tmp.exists() or tmp.stat().st_size < sum(p.stat().st_size for p in parts) * 0.9:
+            raise RuntimeError("assemblage incomplet")
+        os.replace(tmp, main)
+        for p in parts:
+            if p != main:
+                p.unlink(missing_ok=True)
+    finally:
+        lst.unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)

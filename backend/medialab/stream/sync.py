@@ -12,7 +12,7 @@ import httpx
 
 from ..errors import Canceled, MediaLabError
 from ..logging_setup import get_logger
-from . import m3u, quality, xmltv
+from . import m3u, quality, versions, xmltv
 from .store import Store, is_adult, norm
 from .xtream import XtreamClient, as_float, as_int, as_str, redact
 
@@ -122,6 +122,10 @@ def _write_xtream(store: Store, aid: str, typ: str, cats: list[dict], items: lis
                 for s in items if as_str(s.get(key)) and (s.get("genre") or s.get("cast") or s.get("actors") or s.get("director"))))
         con.commit()
     quality.index(store, aid, typ)
+    if typ in ("movie", "series"):
+        key = "stream_id" if typ == "movie" else "series_id"
+        versions.index(store, aid, typ, {as_str(s.get(key)): as_str(s.get("tmdb") or s.get("tmdb_id"))
+                                          for s in items if as_str(s.get(key))})
     return len(items)
 
 
@@ -168,6 +172,8 @@ def _sync_m3u(store: Store, account: dict, progress: Progress, cancel=None) -> d
         con.executemany("INSERT OR REPLACE INTO vod VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", vod)
         con.commit()
     quality.index(store, aid)
+    for t in ("movie", "series"):
+        versions.index(store, aid, t)
     counts = {"live": len(live), "movie": len(vod), "series": 0}
     store.update_account(aid, synced=time.time(), counts=counts)
     progress(1.0, "Liste à jour")

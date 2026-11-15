@@ -19,7 +19,7 @@ from .. import APP_NAME
 from ..errors import Canceled, MediaLabError
 from ..events import bus
 from ..logging_setup import get_logger
-from . import catalog, images, recorder, sync
+from . import catalog, images, recorder, subs_online, sync, versions
 from . import search as search_index
 from .player import Player
 from .relay import relay
@@ -302,6 +302,8 @@ def register(app: FastAPI, S) -> None:
             log.info("Play %s %s (relais local)", body.type, redact(url))
             url = relay.url_for(url, ua)
         player.play(url, item, start_at, ua, track_langs() if body.type in ("movie", "episode") else None)
+        if body.type in ("movie", "episode"):
+            threading.Thread(target=online_subtitles, args=(account, dict(item)), name="subs-online", daemon=True).start()
         if player.preloaded() is None:  # la chaîne ouverte d'avance vient d'être affichée (ou il n'y en avait pas)
             conns.release(aid, "preload")
         if body.type == "live":
@@ -311,6 +313,89 @@ def register(app: FastAPI, S) -> None:
             conns.release(aid, "preload")
         bus.publish("player", {"event": "started", "item": item})
         return {"item": item, "resumed_at": start_at}
+
+    def online_subtitles(account: dict, item: dict) -> None:
+        """Sous-titres d'OpenSubtitles pour un film / un épisode qui n'en a pas dans tes langues (subs_online.py)."""
+        aid, iid = account["id"], item["id"]
+        try:
+            tracks = None
+            for _ in range(60):  # la vidéo s'ouvre : on attend ses pistes (30 s au plus)
+                if not player.item or player.item.get("id") != iid:
+                    return
+                st = player.snapshot()
+                if any(t["type"] == "audio" for t in st.get("tracks") or []):
+                    tracks = st["tracks"]
+                    break
+                time.sleep(0.5)
+            if tracks is None:
+                return
+            s = sess.settings()
+            missing = [l for l in subs_online.wanted_langs(s.get("sub_lang") or "fr") if not subs_online.has_track(tracks, l)]
+            if not missing:
+                return
+            imdb, season, episode, title, year = None, None, None, "", None
+
+            def details(typ: str, i: str) -> dict:
+                c = client(account) if account["kind"] == "xtream" else None
+                try:
+                    return catalog.vod_info(store, c, aid, i) if typ == "movie" else catalog.series_info(store, c, aid, i, sess.profile)
+                finally:
+                    if c:
+                        c.close()
+
+            if item["kind"] == "movie":
+                w = store.one("SELECT tmdb FROM works WHERE account=? AND type='movie' AND id=?", (aid, iid)) or {}
+                d = {} if w.get("tmdb") else details("movie", iid)
+                tmdb = w.get("tmdb") or d.get("tmdb_id")
+                row = store.one("SELECT name, year FROM vod WHERE account=? AND id=?", (aid, iid)) or {}
+                title, y = catalog.search_title(row.get("name") or item.get("title") or "")
+                year = row.get("year") or y
+            else:
+                sid = item.get("series") or ""
+                d = details("series", sid)
+                w = store.one("SELECT tmdb FROM works WHERE account=? AND type='series' AND id=?", (aid, sid)) or {}
+                tmdb = w.get("tmdb") or d.get("tmdb_id")
+                for se in d.get("seasons") or []:
+                    for e in se["episodes"]:
+                        if e["id"] == iid:
+                            season, episode = int(se["season"] or 0) or None, e["episode"]
+                title, year = catalog.search_title(d.get("name") or "")
+                if season is None or episode is None:
+                    return  # sans numéro d'épisode, on risquerait les sous-titres d'un autre épisode
+            if tmdb:
+                imdb = versions.work_info(store, "movie" if item["kind"] == "movie" else "series", str(tmdb)).get("imdb")
+            audio = next((t for t in tracks if t["type"] == "audio" and t.get("selected")), None)
+            audio_lang = ((audio or {}).get("lang") or "").lower()
+            prefs = {x.strip().lower() for x in (s.get("audio_lang") or "fr").split(",")}
+            sub_on = any(t["type"] == "sub" and t.get("selected") for t in tracks)
+            # la vidéo est dans une autre langue que la tienne et rien n'est affiché : le premier sous-titre est activé
+            select_first = not sub_on and bool(audio_lang) and audio_lang not in prefs
+            added: list[str] = []
+            for lang in missing:
+                found = subs_online.search(imdb, lang, title=title, year=year, season=season, episode=episode)
+                if not imdb:  # trouvé par le titre : son identifiant IMDb sert pour les autres langues
+                    ids = [s_["imdb"] for s_ in found if s_.get("imdb")]
+                    imdb = max(set(ids), key=ids.count) if ids else None
+                n = 0
+                for sub in found[:subs_online.PER_LANG * 2]:
+                    if n >= subs_online.PER_LANG:
+                        break
+                    path = subs_online.download(sub)
+                    if not path:
+                        continue
+                    n += 1
+                    name = f"OpenSubtitles {n}"  # le lecteur ajoute la langue devant : « Français · OpenSubtitles 1 »
+                    if not player.add_external_sub(iid, str(path), name, lang, select_first):
+                        return
+                    select_first = False
+                if n:
+                    added.append(f"{subs_online.LABEL.get(lang, lang)} ({n})")
+            if added:
+                log.info("Online subtitles added for %s: %s", iid, ", ".join(added))
+                player.flash("Sous-titres ajoutés : " + ", ".join(added))
+                bus.publish("player", {"event": "tracks"})
+        except Exception:  # noqa: BLE001 — jamais au détriment de la lecture
+            log.exception("online subtitles")
 
     def schedule_preload(account: dict, cur: str) -> None:
         """Zapping instantané : 1,5 s après le début d'une chaîne, ouvre d'avance la suivante (dans le sens du dernier
@@ -767,6 +852,7 @@ def register(app: FastAPI, S) -> None:
             finally:
                 if c:
                     c.close()
+            versions.remember_tmdb(store, a["id"], "movie", vid, d.get("tmdb_id"))
             catalog.enrich(store, a["id"], "movie", d, sess.profile, sess.show_adult(), sess.quality())
             d["resume"] = catalog.resume_point(store, sess.profile, a["id"], "movie", vid)
             d["fav"] = bool(store.one("SELECT 1 FROM favorites WHERE profile=? AND account=? AND type='movie' AND item=?",
@@ -784,10 +870,49 @@ def register(app: FastAPI, S) -> None:
             finally:
                 if c:
                     c.close()
+            versions.remember_tmdb(store, a["id"], "series", sid, d.get("tmdb_id"))
             catalog.enrich(store, a["id"], "series", d, sess.profile, sess.show_adult(), sess.quality())
             d["fav"] = bool(store.one("SELECT 1 FROM favorites WHERE profile=? AND account=? AND type='series' AND item=?",
                                       (sess.profile, a["id"], sid)))
             return d
+        return await run_in_threadpool(run)
+
+    @app.get("/api/stream/versions/{typ}/{item}")
+    async def all_versions(typ: str, item: str):
+        """Le même film / la même série dans toutes les langues et toutes les qualités du catalogue."""
+        if typ not in versions.TABLE:
+            raise MediaLabError("invalid", "Type inconnu.")
+
+        def run():
+            a = sess.require_account()
+
+            def tmdb_of(i: str) -> str | None:
+                c = client(a) if a["kind"] == "xtream" else None
+                if c is None:
+                    return None
+                try:
+                    d = catalog.vod_info(store, c, a["id"], i) if typ == "movie" else                         catalog.series_info(store, c, a["id"], i, sess.profile)
+                    return d.get("tmdb_id") or None
+                finally:
+                    c.close()
+
+            def details_of(i: str) -> dict:
+                if typ != "movie":
+                    return {}
+                row = store.one("SELECT data FROM details WHERE account=? AND type='movie' AND id=?", (a["id"], i))
+                return json.loads(row["data"]) if row else {}
+
+            langs = [{"fre": "fr", "fra": "fr", "eng": "en", "spa": "es", "ita": "it", "ger": "de", "deu": "de", "ara": "ar",
+                      "tur": "tr", "por": "pt"}.get(x.strip().lower(), x.strip().lower())
+                     for x in (sess.settings().get("audio_lang") or "fr").split(",")]
+            res = versions.versions(store, a["id"], typ, item, tmdb_of=tmdb_of, details_of=details_of,
+                                    pref_langs=list(dict.fromkeys(l for l in langs if len(l) == 2)),
+                                    show_adult=sess.show_adult(), verify_limit=30 if typ == "movie" else 10)
+            fav = {r["item"] for r in store.q("SELECT item FROM favorites WHERE profile=? AND account=? AND type=?",
+                                              (sess.profile, a["id"], typ))}
+            for v in res["versions"]:
+                v["fav"] = v["id"] in fav
+            return res
         return await run_in_threadpool(run)
 
     @app.post("/api/stream/trailer")

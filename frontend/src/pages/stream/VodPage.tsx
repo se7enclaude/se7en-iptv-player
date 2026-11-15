@@ -7,7 +7,7 @@ import { Button, Empty, Modal, Select } from "../../components/ui";
 import { useApp } from "../../store/app";
 import { Category, Item, SeriesInfo, VodInfo, stream } from "../../stream/api";
 import { Bar, Poster, UnlockModal, clock, toggleFav } from "../../stream/components";
-import { DetailHead, SimilarRow } from "../../stream/Details";
+import { AllVersions, DetailHead, SimilarRow } from "../../stream/Details";
 import { toastError, useStream } from "../../stream/store";
 import { CategoryList } from "./LivePage";
 
@@ -62,6 +62,7 @@ export function MovieModal({ id, onClose }: { id: string | null; onClose: () => 
               </Button>
               {i.trailer && <Button onClick={() => api.post("/api/stream/trailer", { id: i.trailer }).catch(toastError)}>Bande-annonce</Button>}
             </>} />
+          <AllVersions type="movie" id={i.id} current={target} onPick={setCur} onPlay={(v) => { onClose(); playMovie(v, true); }} />
           <SimilarRow items={i.similar} onOpen={setCur} />
         </div>
       )}
@@ -115,6 +116,7 @@ export function SeriesModal({ id: openId, onClose }: { id: string | null; onClos
               </Button>
               {i.trailer && <Button onClick={() => api.post("/api/stream/trailer", { id: i.trailer }).catch(toastError)}>Bande-annonce</Button>}
             </>} />
+          <AllVersions type="series" id={i.id} current={i.id} onPick={setId} />
           {i.seasons.length > 0 ? (
             <>
               <div className="st-seasons">

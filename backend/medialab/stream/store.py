@@ -84,6 +84,12 @@ CREATE TABLE IF NOT EXISTS variants (
   pos_all INTEGER, pos_cat INTEGER, PRIMARY KEY (account, type, id));
 CREATE INDEX IF NOT EXISTS variants_grp ON variants (account, type, grp);
 CREATE INDEX IF NOT EXISTS variants_all ON variants (account, type, rep_all, pos_all);
+-- toutes les versions d'une œuvre (langues, qualités) : versions.py
+CREATE TABLE IF NOT EXISTS works (account TEXT, type TEXT, id TEXT, tmdb TEXT, tkey TEXT, lang TEXT, tags TEXT, year INTEGER,
+  rank INTEGER, PRIMARY KEY (account, type, id));
+CREATE INDEX IF NOT EXISTS works_tmdb ON works (account, type, tmdb);
+CREATE INDEX IF NOT EXISTS works_tkey ON works (account, type, tkey);
+CREATE TABLE IF NOT EXISTS wd_titles (key TEXT PRIMARY KEY, data TEXT, fetched REAL);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, profile TEXT, account TEXT, channel TEXT, channel_name TEXT, title TEXT, start REAL, fired INTEGER DEFAULT 0);
 """

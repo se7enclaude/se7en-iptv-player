@@ -951,6 +951,14 @@ class Player:
         if self.mpv is not None:
             self.mpv.command("sub-add", path, "select")
 
+    def add_external_sub(self, item_id: str, path: str, title: str, lang: str, select: bool) -> bool:
+        """Ajoute un sous-titre trouvé en ligne comme une piste normale, si ``item_id`` est toujours ce qui joue."""
+        with self.lock:
+            if self.mpv is None or not self.item or self.item.get("id") != item_id:
+                return False
+            self.mpv.command("sub-add", path, "select" if select else "auto", title, lang)
+            return True
+
     def screenshot(self) -> str | None:
         if self.mpv is None or not self.item:
             return None

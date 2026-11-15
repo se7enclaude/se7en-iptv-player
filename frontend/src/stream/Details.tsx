@@ -1,6 +1,7 @@
-import { Star } from "lucide-react";
-import { ReactNode, useState } from "react";
-import { CastMember, pic, SimilarItem, Variant } from "./api";
+import clsx from "clsx";
+import { ChevronDown, Languages, Play, Star } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { CastMember, pic, SimilarItem, stream, Variant, WorkVersion } from "./api";
 import { Poster, QualityPicker } from "./components";
 
 /** Film / series sheet head: backdrop, poster, facts, genres, the versions (SD / HD / 4K), plot, people, actions. */
@@ -84,6 +85,60 @@ export function SimilarRow({ items, onOpen, title = "Titres similaires" }: { ite
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * « Toutes les versions » : le même film (ou la même série) dans toutes les langues et qualités du catalogue,
+ * rangé par langue (la tienne d'abord). Un clic ouvre cette version, ▶ la lance tout de suite.
+ */
+export function AllVersions({ type, id, current, onPick, onPlay }: { type: "movie" | "series"; id: string; current: string; onPick: (id: string) => void; onPlay?: (id: string) => void }) {
+  const [list, setList] = useState<WorkVersion[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setErr("");
+    stream.versions(type, id).then((r) => alive && setList(r.versions)).catch((e) => alive && (setList([]), setErr(e?.message ?? String(e))));
+    return () => { alive = false; };
+  }, [type, id]);
+  const langs = new Map<string, WorkVersion[]>();
+  for (const v of list ?? []) langs.set(v.lang_label, [...(langs.get(v.lang_label) ?? []), v]);
+  const others = (list ?? []).filter((v) => v.id !== current).length;
+  if (list && others === 0 && !err) return null;
+  return (
+    <div className={clsx("st-versions", open && "open")}>
+      <button type="button" className="st-versions-toggle" onClick={() => setOpen(!open)} disabled={!list}>
+        <Languages size={15} />
+        {list ? <>Toutes les versions <b>{list.length}</b> · {langs.size} langue{langs.size > 1 ? "s" : ""}</> : "Recherche des autres langues et qualités…"}
+        {list && <ChevronDown size={15} className="st-versions-chev" />}
+      </button>
+      {open && list && (
+        <div className="st-versions-list">
+          {[...langs.entries()].map(([lang, vs]) => (
+            <div key={lang} className="st-versions-lang">
+              <span className="st-versions-lang-name">{lang}</span>
+              <div className="st-versions-chips">
+                {vs.map((v) => (
+                  <span key={v.id} role="button" tabIndex={0} className={clsx("st-version", v.id === current && "on")} title={v.name + (v.category ? ` · ${v.category}` : "")}
+                    onClick={() => onPick(v.id)} onKeyDown={(e) => e.key === "Enter" && onPick(v.id)}>
+                    <span className="st-version-q">{[v.quality, ...v.tags].filter(Boolean).join(" · ") || "Standard"}</span>
+                    {v.video && <span className="st-version-video">{v.video}</span>}
+                    {onPlay && (
+                      <button type="button" className="st-version-play" aria-label={`Lancer ${v.name}`} onClick={(e) => { e.stopPropagation(); onPlay(v.id); }}>
+                        <Play size={12} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {err && <p className="st-small muted">{err}</p>}
+        </div>
+      )}
     </div>
   );
 }
