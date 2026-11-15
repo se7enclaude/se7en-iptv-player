@@ -1,4 +1,15 @@
-import { api as client } from "../api/client";
+import { api as client, mediaUrl } from "../api/client";
+
+/* Affiches et logos passent par le moteur : téléchargés une fois, réduits à la taille affichée et gardés sur le disque
+ * (stream/images.py). Le défilement ne décode plus d'images de 1000 × 1500 et rien n'est retéléchargé au lancement. */
+const PIC_SIZES = [64, 96, 128, 192, 256, 384, 512, 768, 1280];
+export function pic(src: string | null | undefined, cssWidth: number): string | undefined {
+  if (!src) return undefined;
+  if (!/^https?:\/\//i.test(src)) return src;
+  const px = Math.round(cssWidth * Math.min(2, window.devicePixelRatio || 1));
+  const w = PIC_SIZES.find((s) => s >= px) ?? PIC_SIZES[PIC_SIZES.length - 1];
+  return mediaUrl(`/api/stream/img?w=${w}&u=${encodeURIComponent(src)}`);
+}
 
 /* Lists (catalogue, categories, guide, home) are kept a short while: going back to a page shows it at once instead of
  * asking the engine again. Any change (POST / PATCH / DELETE, a catalogue update, a profile switch) empties the memo,

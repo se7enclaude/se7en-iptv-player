@@ -1,9 +1,10 @@
 import { ArrowDownUp, ChevronLeft, ChevronRight, Clapperboard, Compass, Ellipsis, Flame, Heart, Play, RefreshCw, Star, Tv } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
+import { usePageActive } from "../../hooks/usePageActive";
 import { useApp } from "../../store/app";
-import { Category, Home, Item, Programme, stream } from "../../stream/api";
+import { Category, Home, Item, Programme, pic, stream } from "../../stream/api";
 import { AccountForm } from "../../stream/AccountForm";
-import { Bar, Logo, PlayDisc, Poster, progressOf, toggleFav, useNow } from "../../stream/components";
+import { Bar, Img, Logo, PlayDisc, Poster, progressOf, toggleFav, useNow } from "../../stream/components";
 import { toastError, useStream } from "../../stream/store";
 import { MovieModal, SeriesModal, playEpisode } from "./VodPage";
 
@@ -34,8 +35,6 @@ export function Welcome() {
 type Featured = Item & { kind: "movie" | "series" };
 interface HeroInfo { art?: string; poster?: string; plot?: string; genres: string[]; fav?: boolean }
 
-const img = (src?: string | null) => (src ? src : undefined);
-
 function Hero({ items, index, setIndex, info, onOpen, onPlay, onFav }: { items: Featured[]; index: number; setIndex: (i: number) => void; info: HeroInfo | null; onOpen: () => void; onPlay: () => void; onFav: () => void }) {
   const m = items[index];
   if (!m) return <div className="sx-hero" />;
@@ -43,8 +42,8 @@ function Hero({ items, index, setIndex, info, onOpen, onPlay, onFav }: { items: 
   const poster = info?.poster ?? m.logo;
   return (
     <div className="sx-hero">
-      {poster && <div className="sx-hero-blur" style={{ backgroundImage: `url("${poster}")` }} />}
-      <div key={m.kind + m.id} className={`sx-hero-art ${art ? "" : "is-poster"}`} style={{ backgroundImage: art || poster ? `url("${art || poster}")` : undefined }} />
+      {poster && <div className="sx-hero-blur" style={{ backgroundImage: `url("${pic(poster, 96)}")` }} />}
+      <div key={m.kind + m.id} className={`sx-hero-art ${art ? "" : "is-poster"}`} style={{ backgroundImage: art || poster ? `url("${pic(art || poster, art ? 1280 : 512)}")` : undefined }} />
       <div className="sx-hero-scrim" />
       <span className="ip-badge ip-badge--glass sx-hero-trend"><Flame size={13} color="var(--trending)" fill="rgba(255,138,61,.4)" /> {m.kind === "movie" ? "Nouveau film" : "Nouvelle série"}</span>
       <div className="sx-hero-body">
@@ -77,12 +76,11 @@ function Hero({ items, index, setIndex, info, onOpen, onPlay, onFav }: { items: 
 }
 
 function LikeCard({ it, onOpen, onPlay }: { it: Featured; onOpen: () => void; onPlay: () => void }) {
-  const [bad, setBad] = useState(false);
   const chip = it.kind === "movie" ? "Film" : "Série";
   const desc = it.plot || [it.year, it.rating ? `★ ${Number(it.rating).toFixed(1)}` : null].filter(Boolean).join(" · ");
   return (
     <button type="button" className="sx-like" onClick={onOpen} title={it.name}>
-      {it.logo && !bad ? <img src={it.logo} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)} /> : <span className="st-poster-fallback">{it.name}</span>}
+      <Img src={it.logo} width={260} fallback={<span className="st-poster-fallback">{it.name}</span>} />
       <span className="st-poster-scrim" />
       <span className="ip-iconbtn ip-iconbtn--scrim ip-iconbtn--sm sx-like-more" aria-hidden><Ellipsis size={15} /></span>
       <span className="sx-like-body">
@@ -190,29 +188,32 @@ export function HomePage() {
   }, [topM, topS]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = featured[idx % Math.max(1, featured.length)];
+  const active = usePageActive();
+  // the room behind the glass follows the hero, only while the home screen is shown
+  useEffect(() => {
+    if (active && cur) useStream.setState({ ambient: info?.art || cur.logo || null });
+  }, [active, cur?.kind, cur?.id, info?.art]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!cur) return;
     let alive = true;
     setInfo(null);
-    useStream.setState({ ambient: cur.logo ?? null });
     const req = cur.kind === "movie" ? stream.vod(cur.id) : stream.series(cur.id);
     req.then((d: any) => {
       if (!alive) return;
       const genres = String(d.genre || "").split(/[,/|]/).map((g: string) => g.trim()).filter(Boolean);
       setInfo({ art: d.backdrop || undefined, poster: d.poster || cur.logo, plot: d.plot, genres, fav: !!d.fav });
-      if (d.backdrop) useStream.setState({ ambient: d.backdrop });
     }).catch(() => alive && setInfo({ genres: [] }));
     return () => {
       alive = false;
     };
   }, [cur?.kind, cur?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the hero moves on by itself every 9 s
+  // the hero moves on by itself every 9 s (paused while another page is shown)
   useEffect(() => {
-    if (featured.length < 2) return;
+    if (featured.length < 2 || !active) return;
     const t = window.setTimeout(() => setIdx((i) => (i + 1) % featured.length), 9000);
     return () => window.clearTimeout(t);
-  }, [idx, featured.length]);
+  }, [idx, featured.length, active]);
 
   const open = (it: Featured) => (it.kind === "movie" ? setMovie(it.id) : setSerie(it.id));
   const playItem = async (it: Featured) => {
@@ -266,7 +267,7 @@ export function HomePage() {
           <div className="sx-side-scroll">
             {trailers.map((t) => (
               <button key={t.kind + t.id} type="button" className="sx-trailer" onClick={() => open(t)} title={t.name}>
-                {img(t.logo) ? <img src={t.logo} alt="" loading="lazy" referrerPolicy="no-referrer" style={{ objectPosition: "center 22%" }} /> : <span className="st-poster-fallback">{t.name}</span>}
+                <Img src={t.logo} width={260} style={{ objectPosition: "center 22%" }} fallback={<span className="st-poster-fallback">{t.name}</span>} />
                 <span className="st-poster-scrim" />
                 <span className="sx-trailer-info">
                   <span className="sx-trailer-title">{t.name}</span>
@@ -286,7 +287,7 @@ export function HomePage() {
               ? home.continue.map((h) => (
                   <button key={h.type + h.item} type="button" className="sx-cw" onClick={() => resume(h)}>
                     <span className="sx-cw-thumb">
-                      {h.logo && <img src={h.logo} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+                      <Img src={h.logo} width={128} />
                       <Bar value={h.progress} />
                     </span>
                     <span className="sx-cw-text">

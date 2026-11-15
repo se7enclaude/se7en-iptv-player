@@ -1,6 +1,6 @@
 import { Star } from "lucide-react";
 import { ReactNode, useState } from "react";
-import { CastMember, SimilarItem, Variant } from "./api";
+import { CastMember, pic, SimilarItem, Variant } from "./api";
 import { Poster, QualityPicker } from "./components";
 
 /** Film / series sheet head: backdrop, poster, facts, genres, the versions (SD / HD / 4K), plot, people, actions. */
@@ -23,7 +23,7 @@ export function DetailHead({ name, poster, backdrop, tagline, facts, genres, plo
 }) {
   return (
     <div className="st-rich">
-      {backdrop && <div className="st-rich-backdrop" style={{ backgroundImage: `url("${backdrop}")` }} aria-hidden />}
+      {backdrop && <div className="st-rich-backdrop" style={{ backgroundImage: `url("${pic(backdrop, 1280)}")` }} aria-hidden />}
       <div className="st-detail">
         <Poster src={poster} name={name} />
         <div className="col" style={{ gap: 10, minWidth: 0 }}>
@@ -48,7 +48,7 @@ function Face({ p }: { p: CastMember }) {
   const [bad, setBad] = useState(false);
   const initials = p.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   return p.photo && !bad ? (
-    <img className="st-face" src={p.photo} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)} />
+    <img className="st-face" src={pic(p.photo, 96)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setBad(true)} />
   ) : (
     <span className="st-face st-face-none">{initials}</span>
   );

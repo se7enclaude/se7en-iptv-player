@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { Check, Clapperboard, Play, RotateCcw, Search, Star, X } from "lucide-react";
+import { usePageActive } from "../../hooks/usePageActive";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { Button, Empty, Modal, Select } from "../../components/ui";
@@ -157,7 +158,15 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
   const version = useStream((s) => s.version);
   const [cats, setCats] = useState<Category[]>([]);
   const [cat, setCat] = useState(() => useStream.getState().vodCategory ?? "__all");
-  useEffect(() => useStream.setState({ vodCategory: null }), []);
+  // a chip of the home screen opens this page on a category (also when the page is kept in memory)
+  const active = usePageActive();
+  const wanted = useStream((s) => s.vodCategory);
+  useEffect(() => {
+    if (!active || !wanted) return;
+    setCat(wanted);
+    setQ("");
+    useStream.setState({ vodCategory: null });
+  }, [active, wanted]);
   const [sort, setSort] = useState("default");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Item[]>([]);

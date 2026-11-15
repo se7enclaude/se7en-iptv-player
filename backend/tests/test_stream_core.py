@@ -524,3 +524,26 @@ def test_duration_estimated_when_the_file_has_none():
     p.mpv.duration = 3000.0
     p.seek(1200, absolute=True)
     assert p.mpv.seeks[-1] == (1200, "absolute+exact")
+
+
+def test_full_lists_read_variants_first_whatever_the_statistics(store, monkeypatch):
+    """Liste complète des films : l'index des versions mène (1 ms), jamais le tableau des films puis un tri de tout le
+    catalogue (300 à 500 ms la page sur 100 000 films) — même avec des statistiques d'index périmées."""
+    app = make_app(channels=10, vod=25, series=2)
+    a = add_fake_account(store, app)
+    run_sync(store, app, a, monkeypatch)
+    seen = []
+    store.conn().set_trace_callback(seen.append)
+    catalog.items(store, a["id"], "movie", "main", False, "__all", limit=10, quality="best")
+    sql = next(s for s in seen if s.lstrip().upper().startswith("SELECT T.*"))
+    plan = [r[3] for r in store.conn().execute("EXPLAIN QUERY PLAN " + sql)]
+    assert plan[0].startswith("SEARCH v USING INDEX variants_all"), plan
+
+
+def test_catalog_update_refreshes_statistics_and_connections(store, monkeypatch):
+    app = make_app(channels=10, vod=25, series=2)
+    a = add_fake_account(store, app)
+    before = store.conn()
+    run_sync(store, app, a, monkeypatch)
+    assert store.conn() is not before  # connexion rouverte : plans de requêtes refaits pour le nouveau catalogue
+    assert store.one("SELECT COUNT(*) AS n FROM sqlite_stat1 WHERE tbl='variants'")["n"] > 0

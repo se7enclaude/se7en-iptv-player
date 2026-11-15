@@ -1,6 +1,7 @@
 """Routes HTTP de se7en IPTV Player et tâches de fond (mise à jour du catalogue et du guide)."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -9,7 +10,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -17,7 +19,7 @@ from .. import APP_NAME
 from ..errors import Canceled, MediaLabError
 from ..events import bus
 from ..logging_setup import get_logger
-from . import catalog, recorder, sync
+from . import catalog, images, recorder, sync
 from . import search as search_index
 from .player import Player
 from .relay import relay
@@ -685,6 +687,27 @@ def register(app: FastAPI, S) -> None:
                     "adult": sess.show_adult(), "settings": {**s, "parental_pin": bool(s.get("parental_pin"))},
                     "mpv": player.mpv is not None or bool(__import__("medialab.stream.player", fromlist=["mpv_dir"]).mpv_dir())}
         return await run_in_threadpool(run)
+
+    # ---------------------------------------------------------------- images (affiches, logos) réduites et gardées
+    @app.get("/api/stream/img")
+    async def image(u: str, w: int = 256):
+        hit = images.cached(u, w)
+        if hit:
+            return FileResponse(hit, media_type="image/webp", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+        def run():
+            ua = ""
+            try:
+                if sess.account:
+                    ua = store.account(sess.account).get("user_agent") or ""
+            except Exception:  # noqa: BLE001
+                pass
+            return images.get(u, w, ua)
+        try:
+            path = await asyncio.get_running_loop().run_in_executor(images.pool(), run)
+        except images.ImageError:
+            return Response(status_code=404, headers={"Cache-Control": "max-age=600"})
+        return FileResponse(path, media_type="image/webp", headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
     # ---------------------------------------------------------------- catalogue
     @app.get("/api/stream/home")

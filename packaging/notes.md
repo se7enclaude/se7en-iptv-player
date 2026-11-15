@@ -1,10 +1,9 @@
-## se7en IPTV Player 1.1.8
+## se7en IPTV Player 1.1.9
 
-- **Corrigé** : une chaîne qui se coupe repart toute seule au lieu de rester figée, et un replay coupé reprend là où il en était.
-- **Corrigé** : les replays ne sont plus décalés d'une heure.
-- **Corrigé** : si la mise à jour du guide des programmes échoue, l'ancien guide est gardé (il ne se vide plus).
-- **Plus rapide** : le zapping et le démarrage de l'appli.
-- **Arrêt propre** : quand tu fermes l'appli, le lecteur, les enregistrements et FFmpeg s'arrêtent avec elle.
+- **Plus fluide** : les affiches et les logos sont téléchargés une seule fois, réduits à la taille affichée et gardés sur ton PC. Le défilement des films ne saccade plus (mesuré sur un écran 240 Hz), et tout s'affiche tout de suite au lancement suivant.
+- **Fondu** : les affiches apparaissent en douceur au lieu de surgir.
+- **Onglets instantanés** : Accueil, Films, Séries et Guide restent en mémoire ; tu retrouves ta liste à l'endroit où tu l'avais laissée.
+- **Corrigé** : sur un gros catalogue (100 000 films), la liste des films pouvait mettre 0,3 s par page ; elle répond maintenant en quelques millisecondes. Le tri par nom est aussi instantané.
 
 Tes listes, tes favoris et tes réglages sont gardés.
 

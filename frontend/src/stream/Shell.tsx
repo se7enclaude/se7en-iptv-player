@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Bell, ChevronDown, Download, Heart, House, Lock, Play, ScrollText, Search, Settings, Square, User, X } from "lucide-react";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Page, useApp } from "../store/app";
-import { stream } from "./api";
+import { pic, stream } from "./api";
 import { toastError, useStream } from "./store";
 
 const COLORS = ["#7FA7AC", "#E9A29A", "#FF8A6B", "#8FB98B", "#B39DDB", "#F2C66D"];
@@ -13,7 +13,7 @@ export function Ambient() {
   const art = useStream((s) => s.ambient);
   return (
     <div className="sx-ambient" aria-hidden>
-      {art && <div className="sx-ambient-art" style={{ backgroundImage: `url("${art}")` }} />}
+      {art && <div className="sx-ambient-art" style={{ backgroundImage: `url("${pic(art, 96)}")` }} />}
       <div className="sx-ambient-shade" />
       <div className="sx-ambient-lamp" />
     </div>

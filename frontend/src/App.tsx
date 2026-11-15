@@ -4,6 +4,7 @@ import { Splash } from "./components/Splash";
 import { Toasts } from "./components/Toasts";
 import { Wordmark } from "./components/TopBar";
 import { Button, Modal } from "./components/ui";
+import { PageActive } from "./hooks/usePageActive";
 import { SHORTCUTS, useGlobalShortcuts } from "./hooks/useShortcuts";
 import { resolveLang, translate, useT } from "./i18n";
 import { UpdateBanner } from "./components/UpdateBanner";
@@ -36,8 +37,9 @@ const PAGES: Partial<Record<PageId, () => ReactNode>> = {
   settings: SettingsPage,
   logs: LogsPage,
 };
-// Playback lives in the backend: pages can be unmounted freely.
-const KEEP_ALIVE: PageId[] = [];
+// Pages kept mounted once visited: coming back is instant and the list is where you left it (no refetch, no
+// re-decoding of every poster). Not the pages that hold the video surface (live, watch): only one may place mpv.
+const KEEP_ALIVE: PageId[] = ["home", "movies", "series", "guide"];
 // Pages that fill the window (their own columns, no centered column)
 const BLEED: PageId[] = ["live", "guide", "movies", "series", "watch"];
 // Pages that draw their own padding (home: sidebar + feed like the reference)
@@ -109,10 +111,14 @@ export function App() {
     return () => window.removeEventListener("se7en:replay-splash", replay);
   }, []);
 
-  const [visited, setVisited] = useState<PageId[]>([]);
+  // kept pages belong to one profile and one account: switching either starts afresh
+  const owner = useStream((s) => `${s.state?.profile ?? ""}:${s.state?.account ?? ""}`);
+  const [visited, setVisited] = useState<{ owner: string; pages: PageId[] }>({ owner: "", pages: [] });
+  const kept = visited.owner === owner ? visited.pages : [];
+  const keptNow = KEEP_ALIVE.includes(page) && !kept.includes(page) ? [...kept, page] : kept;
   useEffect(() => {
-    if (KEEP_ALIVE.includes(page) && !visited.includes(page)) setVisited((v) => [...v, page]);
-  }, [page, visited]);
+    if (keptNow !== kept || visited.owner !== owner) setVisited({ owner, pages: keptNow });
+  }, [keptNow, kept, owner, visited.owner]);
   // The splash always sits at the same place in the tree: switching from "loading" to the app must not
   // remount it (that restarted the animation and its sound).
   const splashNode = splash && <Splash version={version} ready={ready || !!bootError} onDone={() => setSplash(false)} />;
@@ -166,9 +172,6 @@ export function App() {
       );
 
     const welcome = !hasAccount && page !== "settings" && page !== "logs";
-    const Page = welcome ? Welcome : PAGES[page] ?? HomePage;
-    const bleed = !welcome && BLEED.includes(page);
-    const flush = !welcome && FLUSH.includes(page);
     return (
       <div className={`sx-root ${theater ? "is-theater" : ""}`}>
         <Ambient />
@@ -178,9 +181,25 @@ export function App() {
           <main className="sx-main">
             <UpdateBanner />
             <UpdateLaunchNotice blocked={splash} />
-            <div key={welcome ? "welcome" : page} className={`page page-enter ${bleed ? "st-bleed" : ""} ${flush ? "sx-flush" : ""}`}>
-              <Page />
-            </div>
+            {welcome ? (
+              <div key="welcome" className="page page-enter">
+                <Welcome />
+              </div>
+            ) : (
+              // one flat list so a page keeps its place (and its state) when it becomes hidden or visible again
+              [...keptNow, ...(keptNow.includes(page) ? [] : [page])].map((p) => {
+                const P = PAGES[p] ?? HomePage;
+                const on = p === page;
+                return (
+                  <div key={`${p}:${owner}`} aria-hidden={!on || undefined}
+                    className={`page ${on ? "page-enter" : "page-kept"} ${BLEED.includes(p) ? "st-bleed" : ""} ${FLUSH.includes(p) ? "sx-flush" : ""}`}>
+                    <PageActive.Provider value={on}>
+                      <P />
+                    </PageActive.Provider>
+                  </div>
+                );
+              })
+            )}
           </main>
         </div>
         <Toasts />

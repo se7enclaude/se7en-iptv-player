@@ -106,7 +106,8 @@ def items(store: Store, aid: str, typ: str, profile: str, show_adult: bool, cate
         # l'index de variants (sans retrier 100 000 lignes) ; les autres tris partent de l'index du tableau (CROSS JOIN
         # impose cet ordre à SQLite)
         if flag == "rep_all" and order == "t.position":
-            src = (f"FROM variants v JOIN {table} t ON t.account=v.account AND t.id=v.id "
+            # CROSS JOIN : variants d'abord, quelles que soient les statistiques (sinon tri des 100 000 films à chaque page)
+            src = (f"FROM variants v CROSS JOIN {table} t ON t.account=v.account AND t.id=v.id "
                    f"WHERE v.account=? AND v.type=? AND v.rep_all=1 AND {sql_where}")
             gparams = [aid, typ] + params
             order = "v.pos_all, t.position"

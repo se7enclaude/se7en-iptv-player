@@ -1,8 +1,8 @@
 import clsx from "clsx";
 import { Lock, Play, Tv } from "lucide-react";
-import { MouseEvent, ReactNode, UIEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, MouseEvent, ReactNode, UIEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, Modal } from "../components/ui";
-import { stream, Variant } from "./api";
+import { pic, stream, Variant } from "./api";
 import { toastError, useStream } from "./store";
 
 // ------------------------------------------------------------------ formats
@@ -39,13 +39,26 @@ export function useNow(ms = 30000): number {
 }
 
 // ------------------------------------------------------------------ images
+/** Une image du catalogue : à la bonne taille (cache du moteur), décodée hors du fil principal, qui apparaît en fondu
+ * au lieu de surgir. ``fallback`` s'affiche si elle manque ou ne se charge pas. */
+export function Img({ src, width, fallback, className, style }: { src?: string | null; width: number; fallback?: ReactNode; className?: string; style?: CSSProperties }) {
+  const url = pic(src, width);
+  const [state, setState] = useState<"wait" | "ok" | "bad">("wait");
+  useEffect(() => setState("wait"), [url]);
+  if (!url || state === "bad") return <>{fallback ?? null}</>;
+  return (
+    <img src={url} alt="" loading="lazy" decoding="async" draggable={false} referrerPolicy="no-referrer" style={style}
+      className={clsx("st-img", state === "ok" && "on", className)}
+      ref={(el) => { if (el && el.complete && el.naturalWidth && state === "wait") setState("ok"); }}
+      onLoad={() => setState("ok")} onError={() => setState("bad")} />
+  );
+}
+
 export function Logo({ src, name, size = 40, className }: { src?: string | null; name: string; size?: number; className?: string }) {
-  const [bad, setBad] = useState(false);
-  useEffect(() => setBad(false), [src]);
   const initials = name.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
     <span className={clsx("st-logo", className)} style={{ width: size, height: size }}>
-      {src && !bad ? <img src={src} alt="" loading="lazy" draggable={false} referrerPolicy="no-referrer" onError={() => setBad(true)} /> : <span className="st-logo-txt">{initials || <Tv size={size * 0.45} />}</span>}
+      <Img src={src} width={size} fallback={<span className="st-logo-txt">{initials || <Tv size={size * 0.45} />}</span>} />
     </span>
   );
 }
@@ -61,12 +74,10 @@ export function PlayDisc({ onClick, small, label = "Lecture" }: { onClick?: (e: 
 
 /** Portrait card: artwork edge to edge, title on a bottom scrim, round white play disc, red resume line. */
 export function Poster({ src, name, progress, badge, onClick, sub, onPlay }: { src?: string | null; name: string; progress?: number; badge?: ReactNode; onClick?: () => void; sub?: ReactNode; onPlay?: () => void }) {
-  const [bad, setBad] = useState(false);
-  useEffect(() => setBad(false), [src]);
   return (
     <button className="st-poster" onClick={onClick} title={name}>
       <span className="st-poster-img">
-        {src && !bad ? <img src={src} alt="" loading="lazy" draggable={false} referrerPolicy="no-referrer" onError={() => setBad(true)} /> : <span className="st-poster-fallback">{name}</span>}
+        <Img src={src} width={260} fallback={<span className="st-poster-fallback">{name}</span>} />
       </span>
       <span className="st-poster-scrim" />
       {badge && <span className="st-poster-badge ip-badge ip-badge--glass">{badge}</span>}

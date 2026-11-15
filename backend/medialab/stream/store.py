@@ -48,6 +48,7 @@ CREATE INDEX IF NOT EXISTS vod_pos ON vod (account, position);
 CREATE INDEX IF NOT EXISTS vod_added ON vod (account, added);
 CREATE INDEX IF NOT EXISTS vod_rating ON vod (account, rating);
 CREATE INDEX IF NOT EXISTS vod_year ON vod (account, year);
+CREATE INDEX IF NOT EXISTS vod_norm ON vod (account, norm);
 CREATE TABLE IF NOT EXISTS series (
   account TEXT, id TEXT, name TEXT, norm TEXT, logo TEXT, category TEXT, rating REAL, year INTEGER, plot TEXT,
   added INTEGER, position INTEGER, PRIMARY KEY (account, id));
@@ -56,6 +57,7 @@ CREATE INDEX IF NOT EXISTS series_pos ON series (account, position);
 CREATE INDEX IF NOT EXISTS series_added ON series (account, added);
 CREATE INDEX IF NOT EXISTS series_rating ON series (account, rating);
 CREATE INDEX IF NOT EXISTS series_year ON series (account, year);
+CREATE INDEX IF NOT EXISTS series_norm ON series (account, norm);
 CREATE TABLE IF NOT EXISTS series_info (account TEXT, id TEXT, data TEXT, fetched REAL, PRIMARY KEY (account, id));
 CREATE TABLE IF NOT EXISTS epg (
   account TEXT, channel TEXT, start INTEGER, stop INTEGER, title TEXT, norm TEXT, descr TEXT, category TEXT,
@@ -117,6 +119,7 @@ class Store:
         self.path = path or (paths().data / "stream.db")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
+        self._gen = 0  # changé par refresh() : chaque fil rouvre sa connexion (plans de requêtes recalculés)
         self.write_lock = threading.RLock()
         c = self.conn()
         with self.write_lock:
@@ -129,6 +132,12 @@ class Store:
 
     def conn(self) -> sqlite3.Connection:
         c = getattr(self._local, "c", None)
+        if c is not None and getattr(self._local, "gen", 0) != self._gen:
+            try:
+                c.close()
+            except sqlite3.Error:
+                pass
+            c = None
         if c is None:
             c = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
             c.row_factory = sqlite3.Row
@@ -137,7 +146,19 @@ class Store:
             c.execute("PRAGMA temp_store=MEMORY")
             c.execute("PRAGMA cache_size=-32000")
             self._local.c = c
+            self._local.gen = self._gen
         return c
+
+    def refresh(self) -> None:
+        """Après une mise à jour du catalogue (des dizaines de milliers de lignes) : statistiques des index refaites et
+        connexions rouvertes. Sans ça, les connexions ouvertes avant gardaient des plans faits pour un petit catalogue :
+        une page de films passait de 4 ms à 300 ms jusqu'au redémarrage de l'appli."""
+        with self.write_lock:
+            c = self.conn()
+            c.execute("PRAGMA analysis_limit=2000")
+            c.execute("ANALYZE")
+            c.commit()
+            self._gen += 1
 
     def q(self, sql: str, params: Iterable | dict = ()) -> list[dict]:
         return [dict(r) for r in self.conn().execute(sql, params).fetchall()]

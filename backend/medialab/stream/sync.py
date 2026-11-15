@@ -38,6 +38,16 @@ def _check(cancel) -> None:
 
 # ------------------------------------------------------------------ catalogue
 def sync_catalog(store: Store, account: dict, progress: Progress, cancel=None) -> dict:
+    try:
+        return _sync_catalog(store, account, progress, cancel)
+    finally:
+        try:
+            store.refresh()  # nouveaux volumes : statistiques et plans de requêtes refaits (listes rapides tout de suite)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Catalog stats refresh failed: %s", e)
+
+
+def _sync_catalog(store: Store, account: dict, progress: Progress, cancel=None) -> dict:
     if account["kind"] == "m3u":
         return _sync_m3u(store, account, progress, cancel)
     with client_for(store, account) as c:
