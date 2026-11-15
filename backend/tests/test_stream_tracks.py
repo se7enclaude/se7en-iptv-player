@@ -139,3 +139,23 @@ def test_remembered_languages_accepted_by_real_mpv(default_subs_mp4, real_mpv, m
     assert _playing(m)
     time.sleep(0.2)
     assert [tr.get("lang") for tr in m.track_list if tr.get("selected") and tr["type"] == "audio"] == ["fre"]
+
+
+@pytest.mark.parametrize("title, sub, want", [
+    ("S1 E2 · |FR| MobLand 01x02 - Épisode 2 (UHD)", "|FR| MobLand (UHD)", ("S1 E2 · Épisode 2", "MobLand", "4K")),
+    ("|FR| Le Parrain (4K)", "", ("Le Parrain", "", "4K")),
+    ("|IT| Scary Movie | 2026 (UHD)", "", ("Scary Movie", "", "4K")),
+    ("EN: The Godfather 1080p", "", ("The Godfather", "", "HD")),
+    ("Le Parrain", "", ("Le Parrain", "", "")),
+])
+def test_provider_names_become_clean_titles(title, sub, want):
+    n = P.nice_titles(title, sub)
+    assert (n["title"], n["subtitle"], n["badge"]) == want
+
+
+def test_windowed_player_draws_only_messages():
+    """En fenêtre, la page a déjà son titre et ses boutons : sur l'image, seulement les messages."""
+    data, hits = P.osd({"kind": "movie", "title": "|FR| Film (4K)", "controls": False, "duration": 100, "message": "Son coupé"})
+    assert hits == [] and "Son coupé" in data and "Film" not in data
+    data, hits = P.osd({"kind": "movie", "title": "|FR| Film (4K)", "controls": True, "fullscreen": True, "duration": 100})
+    assert "Film" in data and "|FR|" not in data and {h["id"] for h in hits} >= {"pause", "back", "fwd", "subs", "audio", "exit_fs", "seek"}

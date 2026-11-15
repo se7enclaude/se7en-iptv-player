@@ -245,54 +245,145 @@ def _hm(ts: float) -> str:
     return time.strftime("%H:%M", time.localtime(ts))
 
 
+def nice_titles(title: str, subtitle: str = "") -> dict:
+    """Titre et sous-titre lisibles à partir des noms du fournisseur, et la qualité en petit badge :
+    « S1 E2 · |FR| MobLand 01x02 - Épisode 2 (UHD) » / « |FR| MobLand (UHD) » → « S1 E2 · Épisode 2 » / « MobLand » / « 4K »."""
+    raw = f"{title} {subtitle}"
+    low = raw.lower()
+    badge = "4K" if re.search(r"\b(?:4k|uhd|2160p?)\b", low) else "HD" if re.search(r"\b(?:fhd|1080p?)\b", low) else ""
+
+    def clean(s: str) -> str:
+        s = _TAGS.sub(" ", s or "")
+        s = _QUAL.sub(" ", s)
+        s = re.sub(r"\b(?:S\d{1,2}\s*E\d{1,3}|\d{1,2}x\d{1,3})\b(?!\s*·)", " ", s, flags=re.I)
+        s = re.sub(r"\s*\|\s*(?:19|20)\d\d\s*$", "", s)
+        s = re.sub(r"(?:\s+(?:4k|uhd|fhd|hd|sd|hevc|\d{3,4}p))+\s*$", "", s, flags=re.I)
+        s = re.sub(r"\s+", " ", s)
+        return s.strip(" -–—:|·")
+
+    sub = clean(subtitle)
+    head, rest = "", title or ""
+    m = re.match(r"^\s*(S\d+\s*E\d+)\s*·\s*(.*)$", rest)
+    if m:
+        head, rest = m.group(1), m.group(2)
+    rest = clean(rest)
+    if sub and rest.lower().startswith(sub.lower()) and len(rest) > len(sub):
+        rest = rest[len(sub):].strip(" -–—:|·")
+    elif sub and rest.lower() == sub.lower() and head:
+        rest = ""
+    show = " · ".join(x for x in (head, rest) if x) or clean(title) or (title or "")
+    return {"title": show, "subtitle": sub, "badge": badge}
+
+
+def _with_display(item: dict) -> dict:
+    """L'élément lu, avec son titre lisible pour la page (``display_title``, ``display_subtitle``, ``badge``)."""
+    names = nice_titles(item.get("title") or "", item.get("subtitle") or "")
+    return {**item, "display_title": names["title"], "display_subtitle": names["subtitle"], "badge": names["badge"]}
+
+
+_TAGS = re.compile(r"(?:^|\s)(?:\|[^|]{1,14}\||\[[A-Za-z]{2,4}\]|[A-Z]{2,3}:)(?=\s|$)")
+_QUAL = re.compile(r"\s*[\(\[](?:4k|uhd|fhd|hd|sd|hevc|h\.?26[45]|x26[45]|blu-?ray|light|multi|vostfr|vost|vf[fq]?|vo|3d|hdr10?|dv|"
+                   r"dolby vision|\d{3,4}p)(?:[\s/+,-]+[a-z0-9.]+)*[\)\]]", re.I)
+
+# couleurs ASS (&HBBGGRR&)
+WHITE, SOFT, DIM, RED = "&HFFFFFF&", "&HD9D9D9&", "&HA6A6A6&", "&H3B30E5&"
+PANEL = "&H1C1816&"
+
+
+def _shape(d: str, col: str = WHITE, alpha: str = "00", blur: float = 0) -> str:
+    return rf"{{\an7\pos(0,0)\bord0\shad0{rf'\blur{blur:g}' if blur else ''}\1c{col}\1a&H{alpha}&\p1}}{d}"
+
+
+def _text(x: float, y: float, t: str, size: float, an: int = 4, col: str = WHITE, bold: bool = True, shadow: bool = True) -> str:
+    sh = r"\shad1\4c&H000000&\4a&H90&" if shadow else r"\shad0"
+    return rf"{{\an{an}\pos({x:.0f},{y:.0f})\fnManrope\b{1 if bold else 0}\fs{size:.0f}\1c{col}\bord0{sh}}}{t}"
+
+
+def _soft_box(ev: list[str], x: float, y: float, w: float, h: float, r: float, alpha: str = "26") -> None:
+    """Panneau sombre aux bords nets, posé sur une ombre floue (rendu « carte » plutôt que bulle)."""
+    ev.append(_shape(_rr(x, y + 6, w, h, r), "&H000000&", "90", blur=18))
+    ev.append(_shape(_rr(x, y, w, h, r), PANEL, alpha))
+
+
+def _veil(ev: list[str], top: bool, height: int, strength: float, W: int, H: int) -> None:
+    """Dégradé noir en haut ou en bas de l'image, pour lire le texte même sur une scène claire."""
+    # bandes jointives aux bords entiers (sinon les recouvrements d'un pixel dessinent des rayures)
+    n = 60
+    edges = [round(height * i / n) for i in range(n + 1)]
+    for i in range(n):
+        f = (i + 0.5) / n  # 0 → 1 en allant vers le bord
+        a = 255 - int(255 * strength * f ** 1.8)
+        if a >= 254:
+            continue
+        y0, y1 = (height - edges[i + 1], height - edges[i]) if top else (H - height + edges[i], H - height + edges[i + 1])
+        ev.append(_shape(f"m 0 {y0} l {W} {y0} l {W} {y1} l 0 {y1}", "&H000000&", f"{a:02X}"))
+
+
 def osd(state: dict, W: int = 1920, H: int = 1080) -> tuple[str, list[dict]]:
-    """Bandeau (chaîne / titre, programme en cours et suivant) + barre de lecture. Renvoie l'ASS et les zones cliquables."""
+    """En plein écran : titre en haut, barre de lecture en bas. En fenêtre (la page a déjà ses boutons et son titre) :
+    seulement les messages. Renvoie l'ASS et les zones cliquables."""
     ev: list[str] = []
     hits: list[dict] = []
-    glass = r"\bord0\shad0\1c&H4A3B27&\1a&H48&"
-    edge = r"\bord2\shad0\3c&HFFFFFF&\3a&HA8&\1a&HFF&"
-    # ---- bandeau du haut
-    title = _esc(state.get("title") or "")
-    sub = _esc(state.get("subtitle") or "")
-    live = state.get("kind") == "live"
-    tx = 56
-    if state.get("number"):
-        ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(48, 40, 110, 96, 30)}")
-        ev.append(rf"{{\an5\pos(103,88)\fnAnton\fs54\1c&HFFFFFF&\bord0\shad0}}{state['number']}")
-        tx = 178
-    ev.append(rf"{{\an7\pos({tx},34)\fnAnton\fs64\1c&HFFFFFF&\bord0\shad2\4c&H000000&\4a&H70&}}{title}")
-    y2 = 112
-    if live:
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H9AA1E9&\1a&H10&\p1}}{_rr(tx, y2, 140, 40, 20)}")
-        ev.append(rf"{{\an5\pos({tx + 70},{y2 + 20})\fnAnton\fs26\1c&HFFFFFF&\bord0\shad0}}EN DIRECT")
-        sx = tx + 156
-    else:
-        sx = tx
-    if sub:
-        ev.append(rf"{{\an4\pos({sx},{y2 + 20})\fnManrope\b1\fs30\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{sub}")
-    now = state.get("now")
-    if now and now.get("start") and now.get("stop"):
-        frac = max(0.0, min(1.0, (time.time() - now["start"]) / max(1, now["stop"] - now["start"])))
-        bw = 560
-        ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(W - bw - 56, 40, bw, 120, 30)}")
-        ev.append(rf"{{\an7\pos({W - bw - 30},54)\fnManrope\b1\fs28\1c&HFFFFFF&\bord0\shad0}}{_hm(now['start'])}  {_esc(now.get('title') or '')[:34]}")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB0&\p1}}{_rr(W - bw - 30, 100, bw - 52, 10, 5)}")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HB2B9F1&\1a&H00&\p1}}{_rr(W - bw - 30, 100, max(10, (bw - 52) * frac), 10, 5)}")
-        nxt = state.get("next")
-        if nxt and nxt.get("start"):
-            ev.append(rf"{{\an7\pos({W - bw - 30},118)\fnManrope\fs24\1c&HE0E0E0&\bord0\shad0}}Ensuite {_hm(nxt['start'])}  {_esc(nxt.get('title') or '')[:34]}")
-    # ---- barre du bas : des bulles en verre liquide, au milieu
     if state.get("controls"):
-        hits += _bubbles(ev, state, W, H)
-    # ---- messages (volume, erreur, reconnexion)
+        _veil(ev, True, 230, 0.62, W, H)
+        _banner(ev, state, W)
+        hits += _controls(ev, state, W, H)
     msg = state.get("message")
     if msg:
-        ev.append(rf"{{\an7\pos(0,0){glass}\p1}}{_rr(W / 2 - 360, H / 2 - 50, 720, 100, 50)}")
-        ev.append(rf"{{\an5\pos({W // 2},{H // 2})\fnManrope\b1\fs34\1c&HFFFFFF&\bord0\shad0}}{_esc(msg)}")
+        t = _esc(msg)
+        w = min(W - 160, 72 + 15.5 * len(t))
+        y = H / 2 - 36 if not state.get("controls") else H * 0.36
+        _soft_box(ev, W / 2 - w / 2, y, w, 72, 20, "1E")
+        ev.append(_text(W / 2, y + 36, t, 28, an=5, shadow=False))
     return "\n".join(ev), hits
 
 
-# ------------------------------------------------------------------ bulles (verre liquide)
+def _banner(ev: list[str], state: dict, W: int) -> None:
+    """En haut à gauche : nom de la série / chaîne en petit, titre en grand ; en direct : numéro, programme en cours."""
+    names = nice_titles(state.get("title") or "", state.get("subtitle") or "")
+    title, sub = _esc(names["title"]), _esc(names["subtitle"])
+    live = state.get("kind") == "live"
+    x = 72
+    if state.get("number"):
+        num = str(state["number"])
+        bw = 34 + 22 * len(num)
+        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c{WHITE}\3a&H70&\1a&HFF&\p1}}{_rr(x, 58, bw, 74, 16)}")
+        ev.append(_text(x + bw / 2, 95, num, 40, an=5, shadow=False))
+        x += bw + 24
+    # ligne du dessus : série / chaîne · badges
+    y1 = 66
+    over = []
+    if live:
+        over.append(("EN DIRECT", RED))
+    if names["badge"]:
+        over.append((names["badge"], None))
+    cx = x
+    for label, fill in over:
+        w = 22 + 12.5 * len(label)
+        if fill:
+            ev.append(_shape(_rr(cx, y1 - 15, w, 30, 7), fill))
+        else:
+            ev.append(rf"{{\an7\pos(0,0)\bord1.5\shad0\3c{WHITE}\3a&H50&\1a&HFF&\p1}}{_rr(cx, y1 - 15, w, 30, 7)}")
+        ev.append(_text(cx + w / 2, y1 + 1, label, 18, an=5, shadow=False))
+        cx += w + 12
+    if sub and sub.lower() != title.lower() and not title.lower().startswith(sub.lower() + " "):
+        ev.append(_text(cx + (4 if over else 0), y1, sub[:60], 26, col=SOFT))
+    ev.append(rf"{{\an7\pos({x},{y1 + 20})\fnManrope\b1\fs50\1c{WHITE}\bord0\shad2\4c&H000000&\4a&HB0&}}{title[:70]}")
+    # en direct : programme en cours et suivant, à droite
+    now = state.get("now")
+    if live and now and now.get("start") and now.get("stop"):
+        frac = max(0.0, min(1.0, (time.time() - now["start"]) / max(1, now["stop"] - now["start"])))
+        rx, bw = W - 72, 460
+        ev.append(_text(rx, 66, f"{_hm(now['start'])} – {_hm(now['stop'])}", 20, an=6, col=DIM))
+        ev.append(_text(rx, 102, _esc(now.get("title") or "")[:38], 30, an=6))
+        ev.append(_shape(_rr(rx - bw, 130, bw, 4, 2), WHITE, "B0"))
+        ev.append(_shape(_rr(rx - bw, 130, max(4, bw * frac), 4, 2), RED))
+        nxt = state.get("next")
+        if nxt and nxt.get("start"):
+            ev.append(_text(rx, 160, f"Ensuite · {_hm(nxt['start'])}  {_esc(nxt.get('title') or '')[:34]}", 22, an=6, col=SOFT, bold=False))
+
+
+# ------------------------------------------------------------------ pistes
 # nom français des langues : codes ISO 639-2 (B et T), ISO 639-1, variantes régionales (« fr-FR ») et noms anglais
 _LANG_GROUPS = {
     "Français": "fre fra fr french francais français", "Anglais": "eng en english",
@@ -371,214 +462,232 @@ def _circle(cx: float, cy: float, r: float) -> str:
     return _rr(cx - r, cy - r, 2 * r, 2 * r, r)
 
 
-def _glass(ev: list[str], cx: float, cy: float, r: float, hot: bool = False, solid: bool = False) -> None:
-    """Une bulle de verre : fond sombre translucide, voile blanc, reflet en haut et liseré clair."""
-    if solid:
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HF4F2F0&\1a&H00&\p1}}{_circle(cx, cy, r)}")
-        return
-    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H{'50' if hot else '78'}&\p1}}{_circle(cx, cy, r)}")
-    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'B8' if hot else 'D8'}&\p1}}{_circle(cx, cy, r)}")
-    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HD0&\p1}}{_rr(cx - r * 0.62, cy - r * 0.86, r * 1.24, r * 0.62, r * 0.31)}")
-    ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&H{'60' if hot else '98'}&\1a&HFF&\p1}}{_circle(cx, cy, r)}")
+def _poly(pts: list[tuple[float, float]]) -> str:
+    return "m " + " l ".join(f"{x:.1f} {y:.1f}" for x, y in pts)
 
 
-def _icon(ev: list[str], kind: str, cx: float, cy: float, dark: bool = False, state: dict | None = None, k: float = 1.0) -> None:
-    """Pictogramme dessiné autour de (cx, cy) ; k le met à l'échelle de la bulle."""
-    col = r"\1c&H100D0B&" if dark else r"\1c&HFFFFFF&"
-    pre = rf"{{\an7\pos(0,0)\bord0\shad0{col}\1a&H00&\p1}}"
+def _arc(cx: float, cy: float, r: float, w: float, a0: float, a1: float, n: int = 28) -> list[tuple[float, float]]:
+    """Anneau d'épaisseur w entre deux angles (degrés, 0 = droite, sens des aiguilles d'une montre)."""
+    import math
+    angles = [math.radians(a0 + (a1 - a0) * i / n) for i in range(n + 1)]
+    outer = [(cx + r * math.cos(a), cy + r * math.sin(a)) for a in angles]
+    inner = [(cx + (r - w) * math.cos(a), cy + (r - w) * math.sin(a)) for a in reversed(angles)]
+    return outer + inner
+
+
+def _bar(x0: float, y0: float, x1: float, y1: float, t: float) -> list[tuple[float, float]]:
+    """Trait épais de (x0, y0) à (x1, y1)."""
+    import math
+    dx, dy = x1 - x0, y1 - y0
+    n = math.hypot(dx, dy) or 1
+    ox, oy = -dy / n * t / 2, dx / n * t / 2
+    return [(x0 + ox, y0 + oy), (x1 + ox, y1 + oy), (x1 - ox, y1 - oy), (x0 - ox, y0 - oy)]
+
+
+def _icon(kind: str, cx: float, cy: float, state: dict | None = None) -> list[str]:
+    """Pictogramme blanc, plat, d'environ 36 px, centré sur (cx, cy) ; une ombre douce le détache de l'image."""
+    shapes: list[str] = []
+    texts: list[str] = []
     x, y = cx, cy
-
-    def shape(d: str) -> None:
-        ev.append(pre + d)
-
-    def text(t: str, size: int = 26) -> None:
-        ev.append(rf"{{\an5\pos({cx:.0f},{cy:.0f})\fnManrope\b1\fs{size * k:.0f}{col}\bord0\shad0}}{t}")
-
-    def p(dx: float, dy: float) -> str:
-        return f"{x + dx * k:.0f} {y + dy * k:.0f}"
-
-    def rr(dx: float, dy: float, w: float, h: float, r: float) -> str:
-        return _rr(x + dx * k, y + dy * k, w * k, h * k, r * k)
-
     if kind == "play":
-        shape(f"m {p(-9, -15)} l {p(16, 0)} l {p(-9, 15)}")
+        shapes.append(_poly([(x - 11, y - 17), (x + 17, y), (x - 11, y + 17)]))
     elif kind == "pause":
-        shape(rr(-12, -14, 8, 28, 3))
-        shape(rr(4, -14, 8, 28, 3))
+        shapes += [_rr(x - 13, y - 16, 9, 32, 2.5), _rr(x + 4, y - 16, 9, 32, 2.5)]
     elif kind in ("back", "fwd"):
-        text("−10" if kind == "back" else "+10", 24)
+        # flèche circulaire : vers la gauche pour reculer, vers la droite pour avancer, « 10 » au milieu
+        r, w = 17, 3.2
+        pts = _arc(x, y, r, w, -90, 210) if kind == "back" else _arc(x, y, r, w, -30, 270)
+        shapes.append(_poly(pts))
+        top = y - r + w / 2
+        tip = [(x - 8, top), (x + 1, top - 7.5), (x + 1, top + 7.5)] if kind == "back" else [(x + 8, top), (x - 1, top - 7.5), (x - 1, top + 7.5)]
+        shapes.append(_poly(tip))
+        texts.append(rf"{{\an5\pos({x:.0f},{y + 1:.0f})\fnManrope\b1\fs15\1c{WHITE}\bord0\shad0}}10")
     elif kind == "subs":
-        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\1a&HFF&\p1}}{rr(-19, -13, 38, 26, 6)}")
-        ev.append(rf"{{\an5\pos({x:.0f},{y + 1:.0f})\fnManrope\b1\fs{17 * k:.0f}{col}\bord0\shad0}}CC")
+        texts.append(rf"{{\an7\pos(0,0)\bord2.6\shad0\3c{WHITE}\1a&HFF&\p1}}{_rr(x - 17, y - 12, 34, 24, 5)}")
+        shapes += [_rr(x - 10, y - 1, 8, 3.2, 1.6), _rr(x + 0, y - 1, 10, 3.2, 1.6),
+                   _rr(x - 10, y + 5, 13, 3.2, 1.6), _rr(x + 5, y + 5, 5, 3.2, 1.6)]
     elif kind == "audio":
-        for n, h in enumerate((10, 22, 30, 18, 8)):
-            shape(rr(-17 + n * 7.5, -h / 2, 4.5, h, 2.2))
+        for n, h in enumerate((8, 18, 28, 14, 22, 8)):
+            shapes.append(_rr(x - 16 + n * 6, y - h / 2, 3.4, h, 1.7))
     elif kind in ("up", "down"):
         d = -1 if kind == "up" else 1
-        shape(f"m {p(-13, -6 * d)} l {p(13, -6 * d)} l {p(0, 8 * d)}")
+        shapes.append(_poly(_bar(x - 11, y - 5 * d, x, y + 6 * d, 3.6)))
+        shapes.append(_poly(_bar(x, y + 6 * d, x + 11, y - 5 * d, 3.6)))
     elif kind == "mute":
-        shape(f"m {p(-16, -6)} l {p(-8, -6)} l {p(2, -15)} l {p(2, 15)} l {p(-8, 6)} l {p(-16, 6)}")
-        if (state or {}).get("muted"):
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H5A5AF0&\1a&H00&\p1}}m {p(6, -9)} l {p(9, -12)} l {p(19, -2)} l {p(16, 1)}")
+        shapes.append(_poly([(x - 16, y - 6), (x - 9, y - 6), (x + 1, y - 14), (x + 1, y + 14), (x - 9, y + 6), (x - 16, y + 6)]))
+        vol = (state or {}).get("volume") or 0
+        if (state or {}).get("muted") or vol <= 0:
+            shapes.append(_poly(_bar(x + 7, y - 6, x + 17, y + 6, 3)))
+            shapes.append(_poly(_bar(x + 17, y - 6, x + 7, y + 6, 3)))
         else:
-            shape(rr(7, -5, 4, 10, 2))
-            shape(rr(14, -10, 4, 20, 2))
+            shapes.append(_poly(_arc(x + 1, y, 9, 3, -45, 45, 12)))
+            if vol > 45:
+                shapes.append(_poly(_arc(x + 1, y, 16, 3, -50, 50, 16)))
     elif kind in ("fs_on", "fs_off"):
-        # quatre coins : vers l'extérieur pour entrer en plein écran, vers le centre pour en sortir
         out = kind == "fs_on"
-        a, b, arm, t = (15, 12, 9, 4) if out else (6, 5, 9, 4)
+        a, b, arm, t = (15, 12, 9, 3.4) if out else (6, 5, 9, 3.4)
         for sx in (-1, 1):
             for sy in (-1, 1):
-                px, py = sx * a, sy * b
-                dx, dy = (-sx, -sy) if out else (sx, sy)  # sens des branches depuis le coin
-                shape(rr(min(px, px + dx * arm) - t / 2, py - t / 2, arm + t, t, 1.5))
-                shape(rr(px - t / 2, min(py, py + dy * arm) - t / 2, t, arm + t, 1.5))
+                px, py = x + sx * a, y + sy * b
+                dx, dy = (-sx, -sy) if out else (sx, sy)
+                shapes.append(_rr(min(px, px + dx * arm) - t / 2, py - t / 2, arm + t, t, 1.2))
+                shapes.append(_rr(px - t / 2, min(py, py + dy * arm) - t / 2, t, arm + t, 1.2))
+    out_ev = [_shape(" ".join(shapes), "&H000000&", "A0", blur=3).replace(r"\pos(0,0)", r"\pos(0,1)")] if shapes else []
+    out_ev += [_shape(s) for s in shapes]
+    return out_ev + texts
 
 
-def _pill(ev: list[str], cx: float, bottom: float, text: str, size: int = 22) -> None:
-    """Petite pastille sombre centrée sur cx, posée au-dessus de « bottom » (nom d'une bulle, temps survolé)."""
-    w = 28 + size * 0.56 * len(text)
-    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H38&\p1}}{_rr(cx - w / 2, bottom - 38, w, 38, 19)}")
-    ev.append(rf"{{\an5\pos({cx:.0f},{bottom - 19:.0f})\fnManrope\b1\fs{size}\1c&HFFFFFF&\bord0\shad0}}{_esc(text)}")
+def _tip(ev: list[str], cx: float, bottom: float, text: str, W: int) -> None:
+    """Nom du bouton survolé (ou temps visé sur la barre) dans une petite étiquette sombre."""
+    t = _esc(text)
+    w = 30 + 10.6 * len(t)
+    cx = max(w / 2 + 24, min(W - w / 2 - 24, cx))
+    _soft_box(ev, cx - w / 2, bottom - 40, w, 40, 10, "18")
+    ev.append(_text(cx, bottom - 20, t, 20, an=5, shadow=False))
 
 
-VOL_W = 128  # largeur de la réglette du volume (bandeau 1920 × 1080)
+VOL_W = 120  # largeur de la réglette du volume (bandeau 1920 × 1080)
 
 
-def _bubbles(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
-    """En bas : la barre de progression sur toute la largeur (films, séries, replay ; comme YouTube : on clique où on
-    veut, le temps visé s'affiche au survol), puis de petites bulles au milieu : −10 s, lecture / pause, +10 s · langue
-    audio, sous-titres · chaîne − / + (direct) · son · plein écran. Audio et sous-titres ouvrent une petite liste."""
+def _controls(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
+    """En bas, comme les grands services de streaming : la barre de progression sur toute la largeur, puis une ligne
+    d'icônes plates. À gauche : lecture / pause, −10 s, +10 s, son, temps. À droite : chaîne − / + (direct), langue
+    audio, sous-titres, plein écran. Audio et sous-titres ouvrent une liste."""
     hits: list[dict] = []
     live = state.get("kind") == "live"
     paused = bool(state.get("paused"))
     full = bool(state.get("fullscreen"))
     hover = state.get("hover")
     vol = "Son coupé" if state.get("muted") else f"Son {int(state.get('volume') or 0)} %"
-    small, big, k = 23, 30, 0.66
-    groups = [
-        [("back", "back", "Reculer de 10 s", small)] if not live else [],
-        [("pause", "play" if paused else "pause", "Lecture" if paused else "Pause", big)],
-        [("fwd", "fwd", "Avancer de 10 s", small)] if not live else [],
-        [("audio", "audio", "Langue audio", small), ("subs", "subs", "Sous-titres", small)],
-        [("zap_up", "up", "Chaîne précédente", small), ("zap_down", "down", "Chaîne suivante", small)] if live else [],
-        [("mute", "mute", vol, small), ("vol", "slider", vol, -VOL_W / 2)],
-        [("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)", small)],
-    ]
-    groups = [g for g in groups if g]
-    gap, sep = 10, 22
-    width = sum(sum(2 * abs(r) for *_x, r in g) + gap * (len(g) - 1) for g in groups) + sep * (len(groups) - 1)
-    cy = H - 58
-    x = (W - width) / 2
-    # voile sombre en dégradé en bas, pour lire la barre et les bulles même sur une image claire
-    for n in range(24):
-        y0 = H - 240 + n * 10
-        a = 255 - int(255 * 0.5 * ((n + 1) / 24) ** 1.6)
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H000000&\1a&H{a:02X}&\p1}}m 0 {y0} l {W} {y0} l {W} {y0 + 10} l 0 {y0 + 10}")
-    # la barre de progression (ou « En direct »), juste au-dessus des bulles
+    _veil(ev, False, 300, 0.78, W, H)
+    pad = 72
+    cy = H - 66
+    ty = H - 128
+    tip = None
+    # ---- barre de progression
     dur, pos = state.get("duration") or 0, state.get("position") or 0
-    tx, tw, ty = 72, W - 144, cy - 54
-    tip = None  # (x, texte) au-dessus de la barre
+    tx, tw = pad, W - 2 * pad
     if dur > 0 and not live:
         frac = max(0.0, min(1.0, pos / dur))
-        over = bool(hover and tx - 12 <= hover[0] <= tx + tw + 12 and ty - 24 <= hover[1] <= ty + 24)
-        bh = 10 if over else 6
+        over = bool(hover and tx - 12 <= hover[0] <= tx + tw + 12 and ty - 22 <= hover[1] <= ty + 22)
+        bh = 8 if over else 4
         y0 = ty - bh / 2
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB0&\p1}}{_rr(tx, y0, tw, bh, bh / 2)}")
+        ev.append(_shape(_rr(tx, y0, tw, bh, bh / 2), WHITE, "B4"))
         cache = state.get("cached") or 0
         if cache > pos:
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H90&\p1}}{_rr(tx, y0, max(bh, tw * min(1, cache / dur)), bh, bh / 2)}")
+            ev.append(_shape(_rr(tx, y0, max(bh, tw * min(1, cache / dur)), bh, bh / 2), WHITE, "98"))
         if over:
             hf = max(0.0, min(1.0, (hover[0] - tx) / tw))
-            ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H70&\p1}}{_rr(tx, y0, max(bh, tw * hf), bh, bh / 2)}")
-            tip = (tx + tw * hf, _clock(hf * dur))
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_rr(tx, y0, max(bh, tw * frac), bh, bh / 2)}")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(tx + tw * frac, ty, 10 if over else 7)}")
-        hits.append({"id": "seek", "x": tx, "y": ty - 24, "w": tw, "h": 48})
-        # à gauche : où on en est ; à droite : à quelle heure ça finit
-        ev.append(rf"{{\an4\pos({tx:.0f},{cy:.0f})\fnManrope\b1\fs24\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{_clock(pos)} / {_clock(dur)}")
+            ev.append(_shape(_rr(tx, y0, max(bh, tw * hf), bh, bh / 2), WHITE, "80"))
+            tip = (tx + tw * hf, _clock(hf * dur), ty - 18)
+        ev.append(_shape(_rr(tx, y0, max(bh, tw * frac), bh, bh / 2), RED))
+        if over:
+            ev.append(_shape(_circle(tx + tw * frac, ty, 9), RED))
+        hits.append({"id": "seek", "x": tx, "y": ty - 22, "w": tw, "h": 44})
+    # ---- boutons
+    left = [("pause", "play" if paused else "pause", "Lecture (Espace)" if paused else "Pause (Espace)")]
+    if not live:
+        left += [("back", "back", "Reculer de 10 s"), ("fwd", "fwd", "Avancer de 10 s")]
+    left += [("mute", "mute", vol), ("vol", "slider", vol)]
+    right = []
+    if live:
+        right += [("zap_up", "up", "Chaîne précédente"), ("zap_down", "down", "Chaîne suivante")]
+    right += [("audio", "audio", "Langue audio"), ("subs", "subs", "Sous-titres"),
+              ("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)")]
+    S = 64  # place d'un bouton
+
+    def button(hid: str, icon: str, name: str, cx: float) -> None:
+        nonlocal tip
+        hot = bool(hover and abs(hover[0] - cx) <= S / 2 and abs(hover[1] - cy) <= S / 2)
+        if hot or (state.get("menu") == "aid" and hid == "audio") or (state.get("menu") == "sid" and hid == "subs"):
+            ev.append(_shape(_circle(cx, cy, 28), WHITE, "E0"))
+        ev.extend(_icon(icon, cx, cy, state))
+        hits.append({"id": hid, "x": cx - S / 2, "y": cy - S / 2, "w": S, "h": S})
+        if hot:
+            tip = (cx, name, cy - 38)
+
+    x = pad - 14
+    for hid, icon, name in left:
+        if icon == "slider":
+            w = VOL_W
+            v = 0 if state.get("muted") else max(0.0, min(1.0, (state.get("volume") or 0) / 100))
+            hot = bool(hover and x - 6 <= hover[0] <= x + w + 6 and cy - 22 <= hover[1] <= cy + 22)
+            h = 6 if hot else 4
+            ev.append(_shape(_rr(x, cy - h / 2, w, h, h / 2), WHITE, "B0"))
+            if v > 0:
+                ev.append(_shape(_rr(x, cy - h / 2, max(h, w * v), h, h / 2), WHITE))
+            ev.append(_shape(_circle(x + w * v, cy, 8 if hot else 6), WHITE))
+            hits.append({"id": "vol", "x": x, "y": cy - 22, "w": w, "h": 44})
+            if hot:
+                tip = (x + w / 2, name, cy - 38)
+            x += w + 28
+            continue
+        button(hid, icon, name, x + S / 2)
+        x += S + (8 if hid == "pause" else 0)
+    # temps : où on en est, et à quelle heure ça finit
+    if dur > 0 and not live:
         end = time.strftime("%H:%M", time.localtime(time.time() + max(0.0, dur - pos) / max(0.1, state.get("speed") or 1)))
-        ev.append(rf"{{\an6\pos({tx + tw:.0f},{cy:.0f})\fnManrope\b0\fs22\1c&HE6E6E6&\bord0\shad1\4a&H80&}}Fin à {end}")
+        ev.append(_text(x, cy, f"{_clock(pos)} / {_clock(dur)}" + rf"{{\b0\fs22\1c{DIM}}}    Fin à {end}", 24))
     else:
         txt = "Mise en mémoire…" if state.get("buffering") else f"En direct · {time.strftime('%H:%M')}"
-        ev.append(rf"{{\an4\pos({tx + 18:.0f},{cy:.0f})\fnManrope\b1\fs22\1c&HFFFFFF&\bord0\shad1\4a&H80&}}{txt}")
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(tx + 5, cy, 5)}")
-    for g in groups:
-        for hid, icon, name, r in g:
-            if icon == "slider":  # le volume : une réglette de verre à côté de la bulle du son (clic ou glisser)
-                w = -2 * r
-                v = 0 if state.get("muted") else max(0.0, min(1.0, (state.get("volume") or 0) / 100))
-                hot = bool(hover and x - 6 <= hover[0] <= x + w + 6 and cy - 22 <= hover[1] <= cy + 22)
-                h = 8 if hot else 6
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H70&\p1}}{_rr(x - 4, cy - h / 2 - 4, w + 8, h + 8, h / 2 + 4)}")
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&HB0&\p1}}{_rr(x, cy - h / 2, w, h, h / 2)}")
-                if v > 0:
-                    ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_rr(x, cy - h / 2, max(h, w * v), h, h / 2)}")
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H00&\p1}}{_circle(x + w * v, cy, 9 if hot else 7)}")
-                hits.append({"id": "vol", "x": x, "y": cy - 22, "w": w, "h": 44})
-                if hot:
-                    tip = (x + w / 2, name)
-                x += w + gap
-                continue
-            cx = x + r
-            hot = bool(hover and (hover[0] - cx) ** 2 + (hover[1] - cy) ** 2 <= r * r)
-            primary = hid == "pause"
-            _glass(ev, cx, cy, r, hot, solid=primary)
-            _icon(ev, icon, cx, cy, dark=primary, state=state, k=k)
-            hits.append({"id": hid, "x": cx - r, "y": cy - r, "w": 2 * r, "h": 2 * r})
-            if hot:
-                tip = (cx, name)
-            x += 2 * r + gap
-        x += sep - gap
-    # le nom de la bulle survolée, ou le temps visé sur la barre, dans une petite pastille au-dessus de la barre
-    if tip and not state.get("menu"):
-        _pill(ev, max(80, min(W - 80, tip[0])), ty - 14, tip[1])
-    # liste des pistes (audio ou sous-titres) au-dessus de sa bulle
+        ev.append(_shape(_circle(x + 6, cy, 6), RED))
+        ev.append(_text(x + 22, cy, txt, 24))
+    x = W - pad + 14 - S * len(right)
+    for hid, icon, name in right:
+        button(hid, icon, name, x + S / 2)
+        x += S
     menu = state.get("menu")
+    if tip and not menu:
+        _tip(ev, tip[0], tip[2], tip[1], W)
     if menu in ("aid", "sid"):
-        kind = "audio" if menu == "aid" else "sub"
-        tracks = [t for t in state.get("tracks") or [] if t.get("type") == kind]
-        rows = ([{"id": "no", "label": "Désactivés", "selected": not any(t.get("selected") for t in tracks)}] if menu == "sid" else []) + [
-            {"id": str(t.get("id")), "label": _esc(lab), "selected": bool(t.get("selected"))}
-            for t, lab in zip(tracks, track_labels(tracks))]
-        if not tracks:  # le fichier du fournisseur n'en contient pas : on le dit, plutôt qu'une liste vide
-            rows.append({"id": "", "label": "Aucun sous-titre dans ce fichier" if menu == "sid" else "Une seule langue",
-                         "selected": False, "note": True})
-        anchor = next(h for h in hits if h["id"] == ("audio" if menu == "aid" else "subs"))
-        # beaucoup de pistes (30 sous-titres, courant) : plusieurs colonnes, pour que toutes restent dans l'écran
-        room = anchor["y"] - 20 - 16 - 56
-        cw = 380
-        for rh in (50, 42, 36):
-            per = max(1, int(room // rh))
-            cols = -(-len(rows) // per)
-            if cols * cw + 32 <= W:
-                break
-        cols = min(cols, max(1, int((W - 32) // cw)))
-        per = -(-len(rows) // cols)
-        rows = rows[:per * cols]
-        mw = cw * cols
-        mh = 16 + rh * per + 40
-        mx = max(16, min(W - mw - 16, anchor["x"] + anchor["w"] / 2 - mw / 2))
-        my = anchor["y"] - 20 - mh
-        ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H120E0C&\1a&H30&\p1}}{_rr(mx, my, mw, mh, 24)}")
-        ev.append(rf"{{\an7\pos(0,0)\bord2\shad0\3c&HFFFFFF&\3a&HA8&\1a&HFF&\p1}}{_rr(mx, my, mw, mh, 24)}")
-        ev.append(rf"{{\an7\pos({mx + 22:.0f},{my + 14:.0f})\fnManrope\b1\fs20\1c&HB8B8B8&\bord0\shad0}}{'Langue audio' if menu == 'aid' else 'Sous-titres'}")
-        fs = 24 if rh >= 50 else 21
-        for n, row in enumerate(rows):
-            cx0 = mx + (n // per) * cw
-            ry = my + 46 + (n % per) * rh
-            hot = bool(hover and row["id"] and cx0 <= hover[0] <= cx0 + cw and ry <= hover[1] <= ry + rh)
-            if row["selected"] or hot:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&HFFFFFF&\1a&H{'D0' if not row['selected'] else 'B0'}&\p1}}{_rr(cx0 + 10, ry + 4, cw - 20, rh - 8, min(18, rh / 2 - 4))}")
-            colour = "&H9A9A9A&" if row.get("note") else "&HFFFFFF&"
-            ev.append(rf"{{\an4\pos({cx0 + 28:.0f},{ry + rh / 2:.0f})\fnManrope\b{1 if row['selected'] else 0}\fs{20 if row.get('note') else fs}\1c{colour}\bord0\shad0}}{row['label']}")
-            if row["selected"]:
-                ev.append(rf"{{\an7\pos(0,0)\bord0\shad0\1c&H372EEE&\1a&H00&\p1}}{_circle(cx0 + cw - 34, ry + rh / 2, 6)}")
-            if row["id"]:
-                hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": cx0, "y": ry, "w": cw, "h": rh})
-        # après les pistes (elles passent d'abord), avant les bulles : un clic dans la liste hors piste ne fait rien
-        hits.insert(sum(1 for h in hits if h["id"].startswith("track:")), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
+        _track_menu(ev, hits, state, menu, W)
     return hits
+
+
+def _track_menu(ev: list[str], hits: list[dict], state: dict, menu: str, W: int) -> None:
+    """Liste des pistes (audio ou sous-titres) au-dessus de son bouton ; plusieurs colonnes s'il y en a beaucoup."""
+    kind = "audio" if menu == "aid" else "sub"
+    hover = state.get("hover")
+    tracks = [t for t in state.get("tracks") or [] if t.get("type") == kind]
+    rows = ([{"id": "no", "label": "Désactivés", "selected": not any(t.get("selected") for t in tracks)}] if menu == "sid" else []) + [
+        {"id": str(t.get("id")), "label": _esc(lab), "selected": bool(t.get("selected"))}
+        for t, lab in zip(tracks, track_labels(tracks))]
+    if not tracks:  # le fichier du fournisseur n'en contient pas : on le dit, plutôt qu'une liste vide
+        rows.append({"id": "", "label": "Aucun sous-titre dans ce fichier" if menu == "sid" else "Une seule langue",
+                     "selected": False, "note": True})
+    anchor = next(h for h in hits if h["id"] == ("audio" if menu == "aid" else "subs"))
+    room = anchor["y"] - 16 - 16 - 60
+    cw = 380
+    for rh in (52, 44, 36):
+        per = max(1, int(room // rh))
+        cols = -(-len(rows) // per)
+        if cols * cw + 32 <= W:
+            break
+    cols = min(cols, max(1, int((W - 32) // cw)))
+    per = -(-len(rows) // cols)
+    rows = rows[:per * cols]
+    mw, mh = cw * cols + 16, 60 + rh * per + 12
+    mx = max(16, min(W - mw - 16, anchor["x"] + anchor["w"] / 2 - mw / 2))
+    my = anchor["y"] - 12 - mh
+    _soft_box(ev, mx, my, mw, mh, 18, "12")
+    ev.append(_text(mx + 28, my + 32, "Langue audio" if menu == "aid" else "Sous-titres", 20, col=DIM, shadow=False))
+    fs = 24 if rh >= 52 else 21
+    for n, row in enumerate(rows):
+        cx0 = mx + 8 + (n // per) * cw
+        ry = my + 56 + (n % per) * rh
+        hot = bool(hover and row["id"] and cx0 <= hover[0] <= cx0 + cw and ry <= hover[1] <= ry + rh)
+        if hot:
+            ev.append(_shape(_rr(cx0 + 4, ry + 3, cw - 8, rh - 6, 10), WHITE, "EA"))
+        if row["selected"]:  # coche à gauche
+            mx0, my0 = cx0 + 24, ry + rh / 2
+            ev.append(_shape(_poly(_bar(mx0 - 7, my0, mx0 - 2, my0 + 5, 3.2)) + " " + _poly(_bar(mx0 - 2, my0 + 5, mx0 + 8, my0 - 6, 3.2)), WHITE))
+        colour = "&H8C8C8C&" if row.get("note") else (WHITE if row["selected"] else SOFT)
+        ev.append(_text(cx0 + 46, ry + rh / 2, row["label"], 20 if row.get("note") else fs, col=colour,
+                        bold=bool(row["selected"]), shadow=False))
+        if row["id"]:
+            hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": cx0, "y": ry, "w": cw, "h": rh})
+    # après les pistes (elles passent d'abord), avant les boutons : un clic dans la liste hors piste ne fait rien
+    hits.insert(sum(1 for h in hits if h["id"].startswith("track:")), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
 
 
 # ------------------------------------------------------------------ lecteur
@@ -700,7 +809,7 @@ class Player:
         old_m, old_h = self.mpv, self.host
         vol, mute = old_m.volume, old_m.mute
         self.mpv, self.host = sp["mpv"], sp["host"]
-        self.item, self.url, self.retries, self.stopped_by_user = dict(item), url, 0, False
+        self.item, self.url, self.retries, self.stopped_by_user = _with_display(item), url, 0, False
         self.mpv.volume, self.mpv.mute = vol, mute
         if self.fullscreen:  # en plein écran, la nouvelle vidéo prend l'écran et l'ancienne retourne dans la page
             self.host.set_fullscreen(True)
@@ -1057,7 +1166,7 @@ class Player:
                 if self.message and time.monotonic() > self.message[1]:
                     self.message = None
                 if visible:
-                    data, self.hits = osd({**(self.item or {}), **st, "controls": True, "fullscreen": self.fullscreen,
+                    data, self.hits = osd({**(self.item or {}), **st, "controls": self.fullscreen, "fullscreen": self.fullscreen,
                                            "hover": self.hover, "menu": self.menu,
                                            "message": self.message[0] if self.message else None})
                 else:

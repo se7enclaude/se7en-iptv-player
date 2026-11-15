@@ -56,8 +56,8 @@ export function WatchPage() {
         <div className="row st-watch-head">
           <Button iconOnly icon={<ArrowLeft size={17} />} tip="Retour" onClick={() => back(backTo as any)} />
           <div style={{ minWidth: 0 }}>
-            <div className="st-watch-title">{item?.title}</div>
-            {item?.subtitle && <div className="muted st-watch-sub">{item.subtitle}</div>}
+            <div className="st-watch-title">{item?.display_title || item?.title}</div>
+            {(item?.display_subtitle ?? item?.subtitle) && <div className="muted st-watch-sub">{item?.display_subtitle ?? item?.subtitle}</div>}
           </div>
         </div>
       )}

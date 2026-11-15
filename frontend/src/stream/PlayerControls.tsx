@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Activity, AudioLines, Camera, Captions, CircleDot, Gauge, Maximize, Pause, Play, RectangleHorizontal, Square, Volume2, VolumeX } from "lucide-react";
+import { AudioLines, Captions, CircleDot, Gauge, Maximize, Pause, Play, RectangleHorizontal, Volume2, VolumeX } from "lucide-react";
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Button } from "../components/ui";
@@ -63,8 +63,6 @@ const cmd = (c: string, v?: unknown) => stream.cmd(c, v).catch(toastError);
 export function PlayerControls({ st: given, live, extra }: { st?: PlayerState | null; live?: boolean; extra?: ReactNode }) {
   const polled = usePlayerState(given === undefined);
   const st = given === undefined ? polled : given;
-  const toast = useApp((s) => s.toast);
-  const [stats, setStats] = useState(false);
   // seek bar: the position follows the drag, the jump is asked only once, on release (not at every step)
   const [drag, setDrag] = useState<number | null>(null);
   const dragTimer = useRef(0);
@@ -136,24 +134,9 @@ export function PlayerControls({ st: given, live, extra }: { st?: PlayerState | 
           ].map(([v, l]) => <MenuItem key={v} on={(st?.aspect ?? "-1") === v} onClick={() => { cmd("video-aspect-override", v); cmd("panscan", 0); close(); }}>{l}</MenuItem>)
             .concat(<MenuItem key="zoom" onClick={() => { cmd("panscan", 1); close(); }}>Zoom (remplir)</MenuItem>)}
         </Menu>
-        <Button iconOnly size="sm" icon={<Camera size={16} />} tip="Capture d'écran" disabled={!playing}
-          onClick={async () => { const r = await stream.cmd("screenshot").catch(toastError); if (r && r.folder) toast({ kind: "success", title: "Capture enregistrée", body: r.folder }); }} />
-        <Button iconOnly size="sm" icon={<Activity size={16} />} tip="Statistiques" active={stats} disabled={!playing} onClick={() => setStats(!stats)} />
         {extra}
-        <Button iconOnly size="sm" icon={<Square size={14} />} tip="Arrêter" disabled={!playing} onClick={() => useStream.getState().stop()} />
         <Button iconOnly size="sm" icon={<Maximize size={16} />} tip="Plein écran (F, double-clic)" disabled={!playing} onClick={() => useStream.getState().setTheater(true)} />
       </div>
-      {stats && st?.playing && (
-        <div className="st-stats mono rise">
-          <span>Image <b>{st.width && st.height ? `${st.width}×${st.height}` : "—"}{st.fps ? ` · ${st.fps.toFixed(2)} i/s` : ""}</b></span>
-          <span>Vidéo <b>{st.video_codec?.split(" ")[0] ?? "—"}{st.hwdec && st.hwdec !== "no" ? ` · matériel (${st.hwdec})` : " · logiciel"}</b></span>
-          <span>Son <b>{st.audio_codec ?? "—"}</b></span>
-          <span>Débit <b>{st.video_bitrate ? `${(st.video_bitrate / 1e6).toFixed(1)} Mb/s` : "—"}</b></span>
-          <span>Tampon <b>{st.cache_s != null ? `${st.cache_s.toFixed(1)} s` : "—"}</b></span>
-          <span>Images perdues <b>{st.dropped ?? 0}</b></span>
-          <span>Connexions <b>{st.connections ?? 0}</b></span>
-        </div>
-      )}
     </div>
   );
 }

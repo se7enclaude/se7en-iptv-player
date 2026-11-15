@@ -280,7 +280,7 @@ export interface Track {
 
 export interface PlayerState {
   playing: boolean;
-  item?: { kind: string; id: string; title?: string; subtitle?: string; logo?: string; number?: number; now?: Programme; next?: Programme; series?: string };
+  item?: { kind: string; id: string; title?: string; subtitle?: string; display_title?: string; display_subtitle?: string; badge?: string; logo?: string; number?: number; now?: Programme; next?: Programme; series?: string };
   paused?: boolean;
   buffering?: boolean;
   position?: number;
