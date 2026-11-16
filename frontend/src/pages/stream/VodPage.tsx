@@ -2,12 +2,11 @@ import clsx from "clsx";
 import { Check, Clapperboard, Play, RotateCcw, Search, Star, X } from "lucide-react";
 import { usePageActive } from "../../hooks/usePageActive";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../../api/client";
 import { Button, Empty, Modal, Select } from "../../components/ui";
 import { useApp } from "../../store/app";
 import { Category, Item, SeriesInfo, VodInfo, stream } from "../../stream/api";
 import { Bar, Poster, UnlockModal, clock, toggleFav } from "../../stream/components";
-import { AllVersions, DetailHead, SimilarRow } from "../../stream/Details";
+import { AllVersions, DetailHead, RatingFact, SimilarRow, TrailerButton } from "../../stream/Details";
 import { toastError, useStream } from "../../stream/store";
 import { CategoryList } from "./LivePage";
 
@@ -45,7 +44,7 @@ export function MovieModal({ id, onClose }: { id: string | null; onClose: () => 
       {i && (
         <div className="col" style={{ gap: 18 }}>
           <DetailHead name={i.name} poster={i.poster || i.logo} backdrop={i.backdrop} tagline={i.tagline}
-            facts={[i.year, i.duration, i.rating ? <><Star size={12} /> {Number(i.rating).toFixed(1)}</> : null]}
+            facts={[i.year, i.duration, (i.imdb_rating || i.rating) ? <RatingFact imdb={i.imdb_rating} votes={i.imdb_votes} rating={i.rating} /> : null]}
             genres={i.genres} plot={i.plot} director={i.director} cast={i.cast_list} tmdbError={i.tmdb_error}
             variants={i.variants} current={target} onVariant={setPick}
             actions={<>
@@ -60,7 +59,7 @@ export function MovieModal({ id, onClose }: { id: string | null; onClose: () => 
               <Button icon={<Star size={15} />} active={(i as any).fav} onClick={() => toggleFav("movie", i.id, !(i as any).fav, () => setInfo({ ...i, fav: !(i as any).fav } as VodInfo))}>
                 {(i as any).fav ? "Dans les favoris" : "Favori"}
               </Button>
-              {i.trailer && <Button onClick={() => api.post("/api/stream/trailer", { id: i.trailer }).catch(toastError)}>Bande-annonce</Button>}
+              <TrailerButton id={i.trailer} title={i.name} />
             </>} />
           <AllVersions type="movie" id={i.id} current={target} onPick={setCur} onPlay={(v) => { onClose(); playMovie(v, true); }} />
           <SimilarRow items={i.similar} onOpen={setCur} />
@@ -102,7 +101,7 @@ export function SeriesModal({ id: openId, onClose }: { id: string | null; onClos
       {i && (
         <div className="col" style={{ gap: 14 }}>
           <DetailHead name={i.name} poster={i.logo} backdrop={i.backdrop} tagline={i.tagline}
-            facts={[i.year, i.rating ? <><Star size={12} /> {Number(i.rating).toFixed(1)}</> : null, `${i.seasons.length} saison${i.seasons.length > 1 ? "s" : ""}`]}
+            facts={[i.year, (i.imdb_rating || i.rating) ? <RatingFact imdb={i.imdb_rating} votes={i.imdb_votes} rating={i.rating} /> : null, `${i.seasons.length} saison${i.seasons.length > 1 ? "s" : ""}`]}
             genres={i.genres} plot={i.plot} director={i.director} directorLabel="Création" cast={i.cast_list} tmdbError={i.tmdb_error}
             variants={i.variants} current={i.id} onVariant={setId}
             actions={<>
@@ -114,7 +113,7 @@ export function SeriesModal({ id: openId, onClose }: { id: string | null; onClos
               <Button icon={<Star size={15} />} active={(i as any).fav} onClick={() => toggleFav("series", i.id, !(i as any).fav, () => setInfo({ ...i, fav: !(i as any).fav } as SeriesInfo))}>
                 {(i as any).fav ? "Dans les favoris" : "Favori"}
               </Button>
-              {i.trailer && <Button onClick={() => api.post("/api/stream/trailer", { id: i.trailer }).catch(toastError)}>Bande-annonce</Button>}
+              <TrailerButton id={i.trailer} title={i.name} />
             </>} />
           <AllVersions type="series" id={i.id} current={i.id} onPick={setId} />
           {i.seasons.length > 0 ? (

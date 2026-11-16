@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ DEFAULTS = {"output": "ts", "hwdec": "auto-safe", "buffer_s": 10, "buffer_mb": 1
             "sub_lang": "fr,fre,fra", "record_folder": "", "margin_before": 1, "margin_after": 3, "refresh_hours": 12,
             "refresh_on_start": True, "hide_adult": True, "parental_pin": None, "volume": 100, "user_agent": "",
             "language": "fr", "group_quality": True, "quality_pref": "best", "instant_zap": True,
-            "remote": False}
+            "remote": False, "auto_next": True, "smooth": True, "hdr": True, "sub_scale": 1.0}
 
 
 class Session:
@@ -83,6 +83,17 @@ class AccountBody(BaseModel):
     epg_url: str = ""
     output: str = "ts"
     user_agent: str = ""
+
+
+def next_episode_of(info: dict, iid: str) -> dict | None:
+    """Dans la fiche d'une série, l'épisode qui suit ``iid`` (saison suivante comprise)."""
+    eps = [{**e, "season": se.get("season")} for se in info.get("seasons") or [] for e in se.get("episodes") or []]
+    k = next((n for n, e in enumerate(eps) if str(e.get("id")) == str(iid)), None)
+    if k is None or k + 1 >= len(eps):
+        return None
+    e = eps[k + 1]
+    label = f"S{e.get('season')} E{e.get('episode') if e.get('episode') is not None else '?'} · {e.get('title') or ''}".strip(" ·")
+    return {"id": str(e["id"]), "title": e.get("title") or "", "label": label}
 
 
 class PlayBody(BaseModel):
@@ -304,6 +315,8 @@ def register(app: FastAPI, S) -> None:
         player.play(url, item, start_at, ua, track_langs() if body.type in ("movie", "episode") else None)
         if body.type in ("movie", "episode"):
             threading.Thread(target=online_subtitles, args=(account, dict(item)), name="subs-online", daemon=True).start()
+        if body.type == "episode":
+            threading.Thread(target=find_next_episode, args=(account, dict(item)), name="next-episode", daemon=True).start()
         if player.preloaded() is None:  # la chaîne ouverte d'avance vient d'être affichée (ou il n'y en avait pas)
             conns.release(aid, "preload")
         if body.type == "live":
@@ -313,6 +326,24 @@ def register(app: FastAPI, S) -> None:
             conns.release(aid, "preload")
         bus.publish("player", {"event": "started", "item": item})
         return {"item": item, "resumed_at": start_at}
+
+    def find_next_episode(account: dict, item: dict) -> None:
+        """L'épisode qui suit celui qui commence (pour la carte « Épisode suivant » pendant le générique)."""
+        sid, iid = item.get("series") or "", item.get("id")
+        if not sid:
+            return
+        c = client(account) if account["kind"] == "xtream" else None
+        try:
+            info = catalog.series_info(store, c, account["id"], sid, sess.profile)
+        except Exception as e:  # noqa: BLE001 — sans la liste, pas de carte (la fin de l'épisode enchaîne quand même)
+            log.info("Next episode unknown: %s", e)
+            return
+        finally:
+            if c:
+                c.close()
+        nxt = next_episode_of(info, iid)
+        if nxt and player.item and player.item.get("id") == iid:
+            player.update_item(next_ep=nxt)
 
     def online_subtitles(account: dict, item: dict) -> None:
         """Sous-titres d'OpenSubtitles pour un film / un épisode qui n'en a pas dans tes langues (subs_online.py)."""
@@ -591,6 +622,14 @@ def register(app: FastAPI, S) -> None:
                 sess.digit_timer.start()
             elif action == "track":
                 remember_track(data["kind"], data["id"])
+            elif action == "next_episode":
+                if data.get("id") and data.get("series"):
+                    play(PlayBody(type="episode", id=str(data["id"]), series=str(data["series"]), title=data.get("label"),
+                                  resume=False))
+            elif action == "sub_scale":
+                cur = store.get_meta("settings", {}) or {}
+                cur["sub_scale"] = float(data.get("value") or 1)
+                store.set_meta("settings", cur)
             else:
                 bus.publish("player", {"event": "action", "action": action})
         except MediaLabError as e:
@@ -644,7 +683,7 @@ def register(app: FastAPI, S) -> None:
                 return {"folder": player.screenshot()}
             elif c == "subtitle_file":
                 player.add_subtitle(str(v))
-            elif c in ("aid", "sid", "speed", "video-aspect-override", "panscan", "sub-delay", "audio-delay", "af", "ontop"):
+            elif c in ("aid", "sid", "speed", "video-aspect-override", "panscan", "sub-delay", "sub-scale", "audio-delay", "af", "ontop"):
                 player.set(c, v)
                 if c in ("aid", "sid"):  # langue choisie mémorisée pour ce profil
                     remember_track(c, v)
@@ -915,15 +954,53 @@ def register(app: FastAPI, S) -> None:
             return res
         return await run_in_threadpool(run)
 
+    @app.get("/api/stream/trailer-page")
+    async def trailer_page(v: str = ""):
+        """La bande-annonce YouTube dans une page à part, ouverte par l'appli à l'adresse « localhost » : YouTube refuse
+        de lire une vidéo intégrée dans une page dont l'adresse est un numéro (127.0.0.1), comme celle de l'appli."""
+        import re
+        from fastapi.responses import HTMLResponse
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", v):
+            raise MediaLabError("invalid", "Bande-annonce introuvable.")
+        # certaines bandes-annonces de studios refusent d'être lues hors de YouTube : un bouton pour l'y ouvrir
+        html = ("<!doctype html><html><head><meta charset='utf-8'><title>Bande-annonce</title><style>"
+                "html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:Segoe UI,sans-serif}"
+                "iframe{border:0;width:100%;height:100%;display:block}"
+                "button{position:fixed;right:16px;bottom:16px;padding:9px 16px;border:0;border-radius:99px;"
+                "background:rgba(28,28,32,.82);color:#fff;font:600 13px Segoe UI,sans-serif;cursor:pointer;opacity:.55;transition:opacity .2s}"
+                "button:hover{opacity:1}</style></head><body>"
+                f"<iframe src='https://www.youtube-nocookie.com/embed/{v}?autoplay=1&rel=0&modestbranding=1&hl=fr' "
+                "allow='autoplay; encrypted-media; picture-in-picture; fullscreen' allowfullscreen "
+                "referrerpolicy='strict-origin-when-cross-origin'></iframe>"
+                "<button onclick=\"fetch('/api/stream/trailer?token='+encodeURIComponent(new URLSearchParams(location.search).get('token')||''),"
+                f"{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{id:'{v}',browser:true}})}})"
+                ".then(()=>window.close())\">Ouvrir sur YouTube</button></body></html>")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
     @app.post("/api/stream/trailer")
-    async def trailer(body: dict):
+    async def trailer(body: dict, request: Request):
+        """La bande-annonce dans une fenêtre de l'appli (page à « localhost », voir trailer_page) ; dans le navigateur
+        si l'appli tourne sans sa fenêtre, ou si on le demande (« Ouvrir sur YouTube »)."""
         import re
         import webbrowser
+        from urllib.parse import quote
+        from .. import system
         yt = str(body.get("id") or "")
         if not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", yt):
             raise MediaLabError("invalid", "Bande-annonce introuvable.")
+        if getattr(system, "window", None) is not None and not body.get("browser"):
+            try:
+                import webview
+                port = request.url.port or 80
+                url = f"http://localhost:{port}/api/stream/trailer-page?v={yt}&token={quote(S.token)}"
+                title = str(body.get("title") or "")[:80]
+                webview.create_window(f"Bande-annonce · {title}" if title else "Bande-annonce", url=url, width=1280,
+                                      height=760, min_size=(640, 400), background_color="#000000")
+                return {"ok": True, "window": True}
+            except Exception as e:  # noqa: BLE001
+                log.info("Trailer window unavailable: %s", e)
         webbrowser.open(f"https://www.youtube.com/watch?v={yt}")
-        return {"ok": True}
+        return {"ok": True, "window": False}
 
     @app.post("/api/stream/favorite")
     async def favorite(body: FavBody):
@@ -1132,6 +1209,8 @@ def register(app: FastAPI, S) -> None:
             if k in DEFAULTS and k != "parental_pin":
                 cur[k] = v
         store.set_meta("settings", cur)
+        if {"smooth", "hdr", "sub_scale"} & set(body):
+            await run_in_threadpool(player.apply_video_settings, sess.settings())
         return {**sess.settings(), "parental_pin": bool(sess.settings().get("parental_pin"))}
 
     # ---------------------------------------------------------------- sauvegarde

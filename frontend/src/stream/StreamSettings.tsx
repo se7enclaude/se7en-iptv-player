@@ -233,6 +233,15 @@ export function PlaybackSettings() {
             options={[{ value: "best", label: "Meilleure" }, { value: "fhd", label: "FHD" }, { value: "hd", label: "HD" }, { value: "sd", label: "SD" }]} />
         </Row>
       )}
+      <Row title="Épisode suivant automatique" desc="Pendant le générique de fin, une carte propose l'épisode suivant et le lance après 10 s (« Rester » pour regarder le générique).">
+        <Switch checked={s.auto_next !== false} onChange={(v) => upd({ auto_next: v })} />
+      </Row>
+      <Row title="Image fluide" desc="Les images sont calées sur la fréquence de ton écran (240 Hz) et fondues entre elles : plus de saccades dans les panoramiques ni sur le foot. Aucune image n'est inventée, donc pas d'« effet feuilleton ».">
+        <Switch checked={s.smooth !== false} onChange={(v) => upd({ smooth: v })} />
+      </Row>
+      <Row title="4K HDR amélioré" desc="Films HDR : vraie image HDR si Windows est en mode HDR, sinon couleurs et luminosité adaptées scène par scène à ton écran (plus de 4K terne ou délavée).">
+        <Switch checked={s.hdr !== false} onChange={(v) => upd({ hdr: v })} />
+      </Row>
       <Row title="Décodage matériel" desc="La carte graphique décode la vidéo (moins de processeur, 4K fluide). Désactive-le si l'image a des défauts.">
         <Switch checked={s.hwdec !== "no"} onChange={(v) => upd({ hwdec: v ? "auto-safe" : "no" })} />
       </Row>

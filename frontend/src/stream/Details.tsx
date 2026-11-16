@@ -3,6 +3,7 @@ import { ChevronDown, Languages, Play, Star } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 import { CastMember, pic, SimilarItem, stream, Variant, WorkVersion } from "./api";
 import { Poster, QualityPicker } from "./components";
+import { Button } from "../components/ui";
 
 /** Film / series sheet head: backdrop, poster, facts, genres, the versions (SD / HD / 4K), plot, people, actions. */
 export function DetailHead({ name, poster, backdrop, tagline, facts, genres, plot, director, directorLabel = "Réalisation", cast, variants, current, onVariant, actions, tmdbError }: {
@@ -53,6 +54,22 @@ function Face({ p }: { p: CastMember }) {
   ) : (
     <span className="st-face st-face-none">{initials}</span>
   );
+}
+
+/** La note : IMDb quand on la connaît (avec le nombre de votes), sinon celle du fournisseur. */
+export function RatingFact({ imdb, votes, rating }: { imdb?: number | null; votes?: number | null; rating?: number | null }) {
+  if (imdb) {
+    const v = votes ? (votes >= 1e6 ? `${(votes / 1e6).toFixed(1).replace(".", ",")} M` : votes >= 1e3 ? `${Math.round(votes / 1e3)} k` : `${votes}`) : "";
+    return <span className="st-imdb" title={votes ? `${votes.toLocaleString("fr-FR")} votes sur IMDb` : "Note IMDb"}><b>IMDb</b> {imdb.toFixed(1).replace(".", ",")}{v && <i> · {v}</i>}</span>;
+  }
+  if (rating) return <><Star size={12} /> {Number(rating).toFixed(1)}</>;
+  return null;
+}
+
+/** Bande-annonce YouTube, dans une fenêtre de l'appli. */
+export function TrailerButton({ id, title }: { id?: string | null; title?: string }) {
+  if (!id || !/^[A-Za-z0-9_-]{6,20}$/.test(id)) return null;
+  return <Button icon={<Play size={15} />} onClick={() => stream.trailer(id, title).catch(() => undefined)}>Bande-annonce</Button>;
 }
 
 export function CastRow({ cast }: { cast: CastMember[] }) {

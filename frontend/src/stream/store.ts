@@ -130,6 +130,11 @@ function refreshPending(): void {
 
 async function nextEpisode(item: Playing): Promise<void> {
   if (!item.series) return;
+  const s = await stream.settings().catch(() => null);
+  if (s && s.auto_next === false) {
+    useStream.getState().stop();
+    return;
+  }
   const info = await stream.series(item.series);
   const all = info.seasons.flatMap((s) => s.episodes.map((e) => ({ ...e, season: s.season })));
   const i = all.findIndex((e) => e.id === item.id);

@@ -112,6 +112,7 @@ export function PlayerControls({ st: given, live, extra }: { st?: PlayerState | 
             <>
               <MenuItem on={!subs.some((s) => s.selected)} onClick={() => { cmd("sid", "no"); close(); }}>Aucun</MenuItem>
               {subs.map((t) => <MenuItem key={t.id} on={t.selected} onClick={() => { cmd("sid", t.id); close(); }}>{label(t)}</MenuItem>)}
+              <SubTuning st={st} />
               <MenuItem onClick={async () => {
                 close();
                 const r = await api.post<{ paths: string[] }>("/api/system/pick-files", { kind: "subs", multiple: false }).catch(() => null);
@@ -136,6 +137,41 @@ export function PlayerControls({ st: given, live, extra }: { st?: PlayerState | 
         </Menu>
         {extra}
         <Button iconOnly size="sm" icon={<Maximize size={16} />} tip="Plein écran (F, double-clic)" disabled={!playing} onClick={() => useStream.getState().setTheater(true)} />
+      </div>
+    </div>
+  );
+}
+
+/** Sous-titres décalés ou trop petits : réglés sans fermer la liste (le décalage vaut pour ce film, la taille pour tous). */
+function SubTuning({ st }: { st: PlayerState | null }) {
+  const delay = st?.sub_delay ?? 0;
+  const scale = st?.sub_scale ?? 1;
+  const [d, setD] = useState(delay);
+  const [z, setZ] = useState(scale);
+  useEffect(() => setD(delay), [delay]);
+  useEffect(() => setZ(scale), [scale]);
+  const setDelay = (v: number) => { const r = Math.round(v * 10) / 10; setD(r); cmd("sub-delay", r); };
+  const setSize = (v: number) => {
+    const r = Math.round(Math.max(0.5, Math.min(2.5, v)) * 100) / 100;
+    setZ(r);
+    cmd("sub-scale", r);
+    stream.saveSettings({ sub_scale: r }).catch(() => undefined);
+  };
+  return (
+    <div className="st-sub-tune">
+      <div className="st-sub-tune-row">
+        <span>Décalage</span>
+        <button onClick={() => setDelay(d - 0.5)} aria-label="Plus tôt">−</button>
+        <b>{`${d > 0 ? "+" : ""}${d.toFixed(1).replace(".", ",")} s`}</b>
+        <button onClick={() => setDelay(d + 0.5)} aria-label="Plus tard">+</button>
+        {Math.abs(d) > 0.01 && <button className="st-sub-tune-reset" onClick={() => setDelay(0)}>Remettre</button>}
+      </div>
+      <div className="st-sub-tune-row">
+        <span>Taille</span>
+        <button onClick={() => setSize(z - 0.1)} aria-label="Plus petits">−</button>
+        <b>{Math.round(z * 100)} %</b>
+        <button onClick={() => setSize(z + 0.1)} aria-label="Plus grands">+</button>
+        {Math.abs(z - 1) > 0.01 && <button className="st-sub-tune-reset" onClick={() => setSize(1)}>Remettre</button>}
       </div>
     </div>
   );

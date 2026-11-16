@@ -328,6 +328,9 @@ def osd(state: dict, W: int = 1920, H: int = 1080) -> tuple[str, list[dict]]:
         _veil(ev, True, 230, 0.62, W, H)
         _banner(ev, state, W)
         hits += _controls(ev, state, W, H)
+    card = state.get("next_card")
+    if card:
+        hits[:0] = _next_card(ev, card, state, W, H)
     msg = state.get("message")
     if msg:
         t = _esc(msg)
@@ -523,6 +526,12 @@ def _icon(kind: str, cx: float, cy: float, state: dict | None = None) -> list[st
             shapes.append(_poly(_arc(x + 1, y, 9, 3, -45, 45, 12)))
             if vol > 45:
                 shapes.append(_poly(_arc(x + 1, y, 16, 3, -50, 50, 16)))
+    elif kind == "gear":
+        import math
+        shapes.append(_poly(_arc(x, y, 11, 4.2, 0, 360, 36)))
+        for k in range(8):  # huit dents
+            a = math.radians(k * 45)
+            shapes.append(_poly(_bar(x + 9 * math.cos(a), y + 9 * math.sin(a), x + 15.5 * math.cos(a), y + 15.5 * math.sin(a), 5.6)))
     elif kind in ("fs_on", "fs_off"):
         out = kind == "fs_on"
         a, b, arm, t = (15, 12, 9, 3.4) if out else (6, 5, 9, 3.4)
@@ -592,14 +601,14 @@ def _controls(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
     right = []
     if live:
         right += [("zap_up", "up", "Chaîne précédente"), ("zap_down", "down", "Chaîne suivante")]
-    right += [("audio", "audio", "Langue audio"), ("subs", "subs", "Sous-titres"),
+    right += [("opts", "gear", "Vitesse et format d'image"), ("audio", "audio", "Langue audio"), ("subs", "subs", "Sous-titres"),
               ("exit_fs" if full else "fs", "fs_off" if full else "fs_on", "Quitter le plein écran (Échap)" if full else "Plein écran (F)")]
     S = 64  # place d'un bouton
 
     def button(hid: str, icon: str, name: str, cx: float) -> None:
         nonlocal tip
         hot = bool(hover and abs(hover[0] - cx) <= S / 2 and abs(hover[1] - cy) <= S / 2)
-        if hot or (state.get("menu") == "aid" and hid == "audio") or (state.get("menu") == "sid" and hid == "subs"):
+        if hot or {"aid": "audio", "sid": "subs", "opt": "opts"}.get(state.get("menu") or "") == hid:
             ev.append(_shape(_circle(cx, cy, 28), WHITE, "E0"))
         ev.extend(_icon(icon, cx, cy, state))
         hits.append({"id": hid, "x": cx - S / 2, "y": cy - S / 2, "w": S, "h": S})
@@ -641,6 +650,8 @@ def _controls(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
         _tip(ev, tip[0], tip[2], tip[1], W)
     if menu in ("aid", "sid"):
         _track_menu(ev, hits, state, menu, W)
+    elif menu == "opt":
+        _opts_menu(ev, hits, state, W)
     return hits
 
 
@@ -656,7 +667,8 @@ def _track_menu(ev: list[str], hits: list[dict], state: dict, menu: str, W: int)
         rows.append({"id": "", "label": "Aucun sous-titre dans ce fichier" if menu == "sid" else "Une seule langue",
                      "selected": False, "note": True})
     anchor = next(h for h in hits if h["id"] == ("audio" if menu == "aid" else "subs"))
-    room = anchor["y"] - 16 - 16 - 60
+    foot = 2 * 56 + 12 if menu == "sid" else 0  # réglages des sous-titres sous la liste
+    room = anchor["y"] - 16 - 16 - 60 - foot
     cw = 380
     for rh in (52, 44, 36):
         per = max(1, int(room // rh))
@@ -666,7 +678,7 @@ def _track_menu(ev: list[str], hits: list[dict], state: dict, menu: str, W: int)
     cols = min(cols, max(1, int((W - 32) // cw)))
     per = -(-len(rows) // cols)
     rows = rows[:per * cols]
-    mw, mh = cw * cols + 16, 60 + rh * per + 12
+    mw, mh = max(cw * cols + 16, 520 if foot else 0), 60 + rh * per + 12 + foot
     mx = max(16, min(W - mw - 16, anchor["x"] + anchor["w"] / 2 - mw / 2))
     my = anchor["y"] - 12 - mh
     _soft_box(ev, mx, my, mw, mh, 18, "12")
@@ -686,8 +698,123 @@ def _track_menu(ev: list[str], hits: list[dict], state: dict, menu: str, W: int)
                         bold=bool(row["selected"]), shadow=False))
         if row["id"]:
             hits.insert(0, {"id": f"track:{menu}:{row['id']}", "x": cx0, "y": ry, "w": cw, "h": rh})
+    if foot:
+        fy = my + 60 + rh * per + 12
+        ev.append(_shape(_rr(mx + 20, fy - 6, mw - 40, 1.5, 0.75), WHITE, "D8"))
+        delay = float(state.get("sub_delay") or 0)
+        scale = float(state.get("sub_scale") or 1)
+        _stepper(ev, hits, mx, fy + 28, mw, "Décalage", f"{delay:+.1f} s".replace(".", ","), "subdelay:-", "subdelay:+",
+                 "subdelay:0" if abs(delay) > 0.01 else None, hover)
+        _stepper(ev, hits, mx, fy + 84, mw, "Taille", f"{round(scale * 100)} %", "subsize:-", "subsize:+",
+                 "subsize:0" if abs(scale - 1) > 0.01 else None, hover)
     # après les pistes (elles passent d'abord), avant les boutons : un clic dans la liste hors piste ne fait rien
-    hits.insert(sum(1 for h in hits if h["id"].startswith("track:")), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
+    hits.insert(sum(1 for h in hits if h["id"].startswith(("track:", "subdelay:", "subsize:"))),
+                {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
+
+
+def _stepper(ev: list[str], hits: list[dict], mx: float, cy: float, mw: float, label: str, value: str, minus: str,
+             plus: str, reset: str | None, hover) -> None:
+    """Une ligne « Décalage   [−]  +0,5 s  [+]   Remettre » dans un menu."""
+    ev.append(_text(mx + 28, cy, label, 22, col=SOFT, bold=False, shadow=False))
+    bx = mx + mw - 28 - 44 - 120 - 44 - (110 if reset else 0)
+    for hid, cx, sign in ((minus, bx + 22, "−"), (plus, bx + 44 + 120 + 22, "+")):
+        hot = bool(hover and abs(hover[0] - cx) <= 22 and abs(hover[1] - cy) <= 22)
+        ev.append(_shape(_circle(cx, cy, 20), WHITE, "C8" if hot else "E2"))
+        ev.append(_text(cx, cy - 1, sign, 28, an=5, shadow=False))
+        hits.insert(0, {"id": hid, "x": cx - 22, "y": cy - 22, "w": 44, "h": 44})
+    ev.append(_text(bx + 44 + 60, cy, value, 22, an=5, shadow=False))
+    if reset:
+        rx = mx + mw - 28 - 96
+        hot = bool(hover and rx <= hover[0] <= rx + 96 and abs(hover[1] - cy) <= 20)
+        ev.append(_text(rx + 48, cy, "Remettre", 19, an=5, col=WHITE if hot else DIM, bold=hot, shadow=False))
+        hits.insert(0, {"id": reset, "x": rx, "y": cy - 20, "w": 96, "h": 40})
+
+
+SPEEDS = (0.5, 0.75, 1.0, 1.25, 1.5, 2.0)
+ASPECTS = (("-1", "Auto"), ("16:9", "16:9"), ("4:3", "4:3"), ("2.35:1", "2,35"), ("zoom", "Remplir"))
+
+
+def _opts_menu(ev: list[str], hits: list[dict], state: dict, W: int) -> None:
+    """Réglages en plein écran : vitesse de lecture et format d'image, en pastilles."""
+    hover = state.get("hover")
+    anchor = next(h for h in hits if h["id"] == "opts")
+    live = state.get("kind") == "live"
+    rows = ([("Vitesse", [(f"speed:{v:g}", "Normale" if v == 1 else f"×{v:g}".replace(".", ","),
+                           abs(float(state.get("speed") or 1) - v) < 0.01) for v in SPEEDS])] if not live else [])
+    zoom = float(state.get("panscan") or 0) > 0.5
+    rows.append(("Format d'image", [(f"aspect:{v}", lab, zoom if v == "zoom" else (not zoom and str(state.get("aspect") or "-1") in (v, v.replace(":", "/"))))
+                                     for v, lab in ASPECTS]))
+    mw = 48 + max(sum(30 + 12.2 * len(lab) + 10 for _h, lab, _o in chips) - 10 for _l, chips in rows)
+    mh = 24 + len(rows) * 104 + 8
+    mx = max(16, min(W - mw - 16, anchor["x"] + anchor["w"] / 2 - mw / 2))
+    my = anchor["y"] - 12 - mh
+    _soft_box(ev, mx, my, mw, mh, 18, "12")
+    for r, (label, chips) in enumerate(rows):
+        ry = my + 24 + r * 104
+        ev.append(_text(mx + 28, ry + 14, label, 20, col=DIM, shadow=False))
+        cx = mx + 24
+        for hid, lab, on in chips:
+            w = 30 + 12.2 * len(lab)
+            hot = bool(hover and cx <= hover[0] <= cx + w and ry + 34 <= hover[1] <= ry + 80)
+            if on:
+                ev.append(_shape(_rr(cx, ry + 36, w, 44, 22), WHITE))
+            else:
+                ev.append(_shape(_rr(cx, ry + 36, w, 44, 22), WHITE, "C8" if hot else "E6"))
+            ev.append(_text(cx + w / 2, ry + 58, lab, 20, an=5, col="&H16120F&" if on else WHITE, shadow=False))
+            hits.insert(0, {"id": hid, "x": cx, "y": ry + 36, "w": w, "h": 44})
+            cx += w + 10
+    hits.insert(sum(1 for h in hits if h["id"].startswith(("speed:", "aspect:"))), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
+
+
+NEXT_COUNTDOWN = 10.0  # secondes avant de lancer l'épisode suivant
+
+
+def _next_card(ev: list[str], card: dict, state: dict, W: int, H: int) -> list[dict]:
+    """« Épisode suivant » en bas à droite pendant le générique : le lancer tout de suite, ou rester."""
+    hover = state.get("hover")
+    w, h = 560, 176
+    x = W - 72 - w
+    y = (H - 128 - 40 - h) if state.get("controls") else (H - 64 - h)
+    _soft_box(ev, x, y, w, h, 18, "10")
+    ev.append(_text(x + 28, y + 34, "ÉPISODE SUIVANT", 18, col=DIM, shadow=False))
+    ev.append(_text(x + 28, y + 70, _esc(card.get("title") or "")[:34], 28, shadow=False))
+    # bouton principal : se remplit pendant le compte à rebours
+    bx, by, bw, bh = x + 24, y + 106, 300, 50
+    hot = bool(hover and bx <= hover[0] <= bx + bw and by <= hover[1] <= by + bh)
+    ev.append(_shape(_rr(bx, by, bw, bh, 12), "&HC8C8C8&" if not hot else "&HDCDCDC&"))
+    frac = max(0.0, min(1.0, 1 - float(card.get("left") or 0) / NEXT_COUNTDOWN))
+    if card.get("paused"):
+        frac = 1.0
+    if frac > 0:
+        ev.append(_shape(_rr(bx, by, max(24, bw * frac), bh, 12), WHITE))
+    ev.append(_shape(_poly([(bx + 26, by + 15), (bx + 44, by + 25), (bx + 26, by + 35)]), "&H16120F&"))
+    left = max(0, int(-(-float(card.get("left") or 0) // 1)))
+    label = "Lecture" if card.get("paused") else f"Lecture dans {left} s"
+    ev.append(_text(bx + 58, by + 25, label, 22, col="&H16120F&", shadow=False))
+    sx, sw = bx + bw + 12, w - 24 - bw - 12 - 24
+    hot2 = bool(hover and sx <= hover[0] <= sx + sw and by <= hover[1] <= by + bh)
+    ev.append(_shape(_rr(sx, by, sw, bh, 12), WHITE, "C8" if hot2 else "E4"))
+    ev.append(_text(sx + sw / 2, by + 25, "Rester", 22, an=5, shadow=False))
+    return [{"id": "next_now", "x": bx, "y": by, "w": bw, "h": bh}, {"id": "next_stay", "x": sx, "y": by, "w": sw, "h": bh},
+            {"id": "card_area", "x": x, "y": y, "w": w, "h": h}]
+
+
+def video_options(s: dict) -> dict:
+    """Image fluide et rendu HDR (réglages de l'appli → options de mpv)."""
+    if s.get("smooth", True):
+        # images calées sur la fréquence de l'écran (240 Hz) et fondues entre elles : plus de saccades dans les
+        # panoramiques ni sur le foot en 25 / 50 i/s (sans « effet feuilleton » : aucune image n'est inventée)
+        o = {"video_sync": "display-resample", "interpolation": "yes", "tscale": "oversample"}
+    else:
+        o = {"video_sync": "audio", "interpolation": "no"}
+    if s.get("hdr", True):
+        # 4K HDR : écran HDR (Windows en mode HDR) → vraie sortie HDR ; sinon conversion soignée vers ton écran
+        # (luminosité de chaque scène mesurée, couleurs gardées, détails des zones claires rendus)
+        o.update(target_colorspace_hint="auto", hdr_compute_peak="yes", hdr_contrast_recovery="0.30",
+                 gamut_mapping_mode="perceptual", tone_mapping="auto")
+    else:
+        o.update(target_colorspace_hint="no", hdr_contrast_recovery="0", hdr_compute_peak="auto")
+    return o
 
 
 # ------------------------------------------------------------------ lecteur
@@ -716,7 +843,8 @@ class Player:
         self.last_pos = 0.0  # dernière position connue (pour reprendre au même endroit après une coupure)
         self._retry_pending = False  # une relance attend déjà (évite d'en lancer deux pour la même coupure)
         self._restart_at = 0.0  # dernier redémarrage de l'image (playback-restart)
-        self.menu: str | None = None  # liste ouverte au-dessus des bulles : "aid" (audio) ou "sid" (sous-titres)
+        self.menu: str | None = None  # liste ouverte au-dessus des boutons : "aid" (audio), "sid" (sous-titres), "opt"
+        self._nx: dict | None = None  # carte « Épisode suivant » de l'épisode en cours
         self.hover: tuple[float, float] | None = None  # souris sur la vidéo, en coordonnées du bandeau (1920 × 1080)
 
     # ---------------------------------------------------------------- création
@@ -749,10 +877,10 @@ class Player:
                     sub_auto="fuzzy", screenshot_directory=str(Path.home() / "Pictures" / "se7en IPTV Player"),
                     screenshot_format="png", volume=str(int(s.get("volume", 100))), volume_max="150",
                     mute="yes" if muted else "no",
-                    # fluidité : chaînes entrelacées (sport en 1080i) désentrelacées, images calées sur l'écran
-                    deinterlace="auto", video_sync="display-resample", interpolation="yes", tscale="oversample",
+                    deinterlace="auto", sub_scale=str(float(s.get("sub_scale") or 1)),
                     alang=s.get("audio_lang", "fr,fre,fra,en,eng"), slang=s.get("sub_lang", "fr,fre,fra"),
                     subs_with_matching_audio="forced")
+        opts.update(video_options(s))
         if fonts.is_dir():
             opts.update(osd_fonts_dir=str(fonts), sub_fonts_dir=str(fonts))
         if os.environ.get("SE7EN_MPV_LOG"):  # diagnostic : journal complet de mpv dans ce fichier
@@ -1050,7 +1178,7 @@ class Player:
     def set(self, prop: str, value: Any) -> None:
         if self.mpv is None:
             return
-        allowed = {"aid", "sid", "speed", "video-aspect-override", "panscan", "video-unscaled", "keepaspect", "sub-delay",
+        allowed = {"aid", "sid", "speed", "video-aspect-override", "panscan", "video-unscaled", "keepaspect", "sub-delay", "sub-scale",
                    "audio-delay", "af", "hwdec", "volume", "mute", "ontop"}
         if prop not in allowed:
             raise MediaLabError("invalid", "Réglage du lecteur inconnu.")
@@ -1116,10 +1244,14 @@ class Player:
                 except Exception:  # noqa: BLE001
                     pass
                 self.menu = None
-            elif hid == "menu_area":
+            elif hid in ("menu_area", "card_area"):
                 pass
-            elif hid in ("audio", "subs"):
-                want = "aid" if hid == "audio" else "sid"
+            elif hid.startswith(("subdelay:", "subsize:", "speed:", "aspect:")):
+                self._menu_setting(hid)
+            elif hid in ("next_now", "next_stay"):
+                self._next_choice(hid == "next_now")
+            elif hid in ("audio", "subs", "opts"):
+                want = {"audio": "aid", "subs": "sid", "opts": "opt"}[hid]
                 self.menu = None if self.menu == want else want
             else:
                 self.menu = None
@@ -1146,6 +1278,97 @@ class Player:
         self.on_action("click", {})
         return "video"
 
+    def _menu_setting(self, hid: str) -> None:
+        """Pastilles et boutons − / + des menus du plein écran."""
+        what, val = hid.split(":", 1)
+        m = self.mpv
+        if m is None:
+            return
+        try:
+            if what == "subdelay":
+                d = 0.0 if val == "0" else round(float(m.sub_delay or 0) + (0.5 if val == "+" else -0.5), 1)
+                m.sub_delay = d
+            elif what == "subsize":
+                v = 1.0 if val == "0" else round(max(0.5, min(2.5, float(m.sub_scale or 1) + (0.1 if val == "+" else -0.1))), 2)
+                m.sub_scale = v
+                self.on_action("sub_scale", {"value": v})  # gardée pour les prochains films
+            elif what == "speed":
+                m.speed = float(val)
+            elif what == "aspect":
+                if val == "zoom":
+                    m.video_aspect_override, m.panscan = "-1", 1.0
+                else:
+                    m.video_aspect_override, m.panscan = val, 0.0
+        except Exception as e:  # noqa: BLE001
+            log.debug("menu: %s", e)
+
+    def apply_video_settings(self, s: dict) -> None:
+        """Image fluide / HDR / taille des sous-titres changés dans les réglages : appliqués tout de suite."""
+        for m in (self.mpv, (self._spare or {}).get("mpv")):
+            if m is None:
+                continue
+            for k, v in {**video_options(s), "sub_scale": str(float(s.get("sub_scale") or 1))}.items():
+                try:
+                    m[k.replace("_", "-")] = v
+                except Exception as e:  # noqa: BLE001
+                    log.debug("option %s: %s", k, e)
+
+    # ---------------------------------------------------------------- épisode suivant
+    def _credits_start(self, dur: float) -> float:
+        """Début du générique de fin : un chapitre « Générique / Credits » s'il y en a, sinon les dernières secondes."""
+        it = self.item or {}
+        if "credits_at" not in it:
+            at = None
+            try:
+                for ch in self.mpv.chapter_list or []:
+                    if re.search(r"cr[ée]dit|g[ée]n[ée]rique|end ?credits|outro|ending", str(ch.get("title") or ""), re.I) \
+                            and float(ch.get("time") or 0) > dur * 0.6:
+                        at = float(ch["time"])
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+            it["credits_at"] = at
+        return it["credits_at"] or dur - max(25.0, min(90.0, dur * 0.03))
+
+    def _next_state(self, st: dict) -> dict | None:
+        """La carte « Épisode suivant » à afficher (ou rien), et le lancement quand le compte à rebours est fini."""
+        it = self.item or {}
+        ne = it.get("next_ep")
+        dur, pos = float(st.get("duration") or 0), float(st.get("position") or 0)
+        if it.get("kind") != "episode" or not ne or dur < 300 or not self.settings().get("auto_next", True):
+            return None
+        nx = self._nx if self._nx and self._nx.get("id") == it.get("id") else None
+        if pos < self._credits_start(dur):
+            if nx:  # retour en arrière avant le générique : la carte reviendra
+                self._nx = None
+            return None
+        now = time.monotonic()
+        if nx is None:
+            nx = self._nx = {"id": it.get("id"), "left": NEXT_COUNTDOWN, "t": now, "stay": False, "fired": False}
+        if nx["stay"] or nx["fired"]:
+            return None
+        paused = bool(st.get("paused"))
+        if not paused:
+            nx["left"] -= now - nx["t"]
+        nx["t"] = now
+        if nx["left"] <= 0:
+            self._next_choice(True)
+            return None
+        title = nice_titles(ne.get("label") or ne.get("title") or "", it.get("subtitle") or "")["title"]
+        return {"title": title, "left": nx["left"], "paused": paused}
+
+    def _next_choice(self, go: bool) -> None:
+        nx = self._nx
+        if nx is None or nx.get("fired"):
+            return
+        if not go:
+            nx["stay"] = True
+            return
+        nx["fired"] = True
+        ne = dict((self.item or {}).get("next_ep") or {})
+        ne["series"] = (self.item or {}).get("series")
+        threading.Thread(target=self.on_action, args=("next_episode", ne), name="next-episode", daemon=True).start()
+
     def _osd_loop(self) -> None:
         last = None
         last_m = None
@@ -1161,13 +1384,14 @@ class Player:
                 last, last_m = None, m
             try:
                 st = self.snapshot(light=not self.menu)
+                card = self._next_state(st) if self.item else None
                 visible = bool(self.item) and (time.monotonic() < self.osd_until or st.get("paused") or st.get("buffering")
-                                               or self.menu is not None)
+                                               or self.menu is not None or card is not None)
                 if self.message and time.monotonic() > self.message[1]:
                     self.message = None
                 if visible:
                     data, self.hits = osd({**(self.item or {}), **st, "controls": self.fullscreen, "fullscreen": self.fullscreen,
-                                           "hover": self.hover, "menu": self.menu,
+                                           "hover": self.hover, "menu": self.menu, "next_card": card,
                                            "message": self.message[0] if self.message else None})
                 else:
                     data, self.hits = "", []
@@ -1207,7 +1431,8 @@ class Player:
                    "video_bitrate": g("video-bitrate"), "audio_bitrate": g("audio-bitrate"),
                    "dropped": (g("frame-drop-count", 0) or 0) + (g("decoder-frame-drop-count", 0) or 0),
                    "cache_s": g("demuxer-cache-duration", 0), "speed": g("speed", 1),
-                   "aspect": g("video-aspect-override", "-1"), "tracks": [
+                   "aspect": g("video-aspect-override", "-1"), "panscan": g("panscan", 0),
+                   "sub_delay": g("sub-delay", 0), "sub_scale": g("sub-scale", 1), "tracks": [
                        {"id": t.get("id"), "type": t.get("type"), "lang": t.get("lang"), "title": t.get("title"),
                         "codec": t.get("codec"), "selected": bool(t.get("selected")), "external": bool(t.get("external")),
                         "forced": bool(t.get("forced")), "default": bool(t.get("default")),

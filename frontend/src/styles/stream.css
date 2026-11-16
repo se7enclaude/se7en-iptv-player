@@ -318,7 +318,7 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 .st-vol { display: flex; align-items: center; gap: 2px; }
 .st-vol input { width: 90px; flex: none; }
 .st-menu { position: relative; }
-.st-menu-pop { position: absolute; bottom: calc(100% + 8px); right: 0; min-width: 220px; max-height: 300px; overflow-y: auto; padding: 6px; border-radius: var(--radius-lg); z-index: 40; background: var(--liquid-sheen), rgba(40, 41, 47, .92); box-shadow: var(--liquid-shadow-panel); backdrop-filter: var(--liquid-filter-panel); }
+.st-menu-pop { position: absolute; bottom: calc(100% + 8px); right: 0; min-width: 260px; max-height: 420px; overflow-y: auto; padding: 6px; border-radius: var(--radius-lg); z-index: 40; background: var(--liquid-sheen), rgba(40, 41, 47, .92); box-shadow: var(--liquid-shadow-panel); backdrop-filter: var(--liquid-filter-panel); }
 .st-live .st-menu-pop, .st-watch .st-menu-pop { bottom: auto; top: calc(100% + 8px); }
 .st-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); font: var(--fw-regular) var(--fs-small)/1.3 var(--font-sans); cursor: pointer; text-align: left; }
 .st-menu-item:hover { background: var(--white-a08); color: var(--text-primary); }
@@ -558,3 +558,17 @@ body { font-family: var(--font-sans); letter-spacing: 0; }
 .st-version-video { font: var(--fw-regular) 11px/1 var(--font-mono, monospace); opacity: .7; }
 .st-version-play { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .9); color: var(--ink-950); cursor: pointer; }
 .st-version.on .st-version-play { background: var(--ink-950); color: #fff; }
+
+/* sous-titres : décalage et taille, sous la liste des pistes */
+.st-sub-tune { margin-top: 6px; padding: 8px 6px 2px; border-top: 1px solid var(--white-a08); display: flex; flex-direction: column; gap: 4px; }
+.st-sub-tune-row { display: flex; align-items: center; gap: 8px; min-height: 36px; font: var(--fw-regular) var(--fs-small)/1 var(--font-sans); color: var(--text-secondary); }
+.st-sub-tune-row > span { flex: 1; padding-left: 6px; }
+.st-sub-tune-row > b { min-width: 64px; text-align: center; color: var(--text-primary); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
+.st-sub-tune-row > button { width: 30px; height: 30px; border: 0; border-radius: 99px; background: var(--white-a08); color: var(--text-primary); font: var(--fw-semibold) 16px/1 var(--font-sans); cursor: pointer; }
+.st-sub-tune-row > button:hover { background: var(--white-a16); }
+.st-sub-tune-row > .st-sub-tune-reset { width: auto; padding: 0 10px; font-size: 12px; background: none; color: var(--text-tertiary); }
+
+/* note IMDb */
+.st-imdb { display: inline-flex; align-items: center; gap: 6px; }
+.st-imdb b { padding: 2px 6px; border-radius: 5px; background: #f5c518; color: #121212; font: 800 11px/1.2 var(--font-sans); letter-spacing: .02em; }
+.st-imdb i { font-style: normal; color: var(--text-tertiary); }

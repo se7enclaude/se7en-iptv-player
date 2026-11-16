@@ -64,6 +64,10 @@ export interface Profile {
 }
 
 export interface StreamSettings {
+  auto_next?: boolean;
+  smooth?: boolean;
+  hdr?: boolean;
+  sub_scale?: number;
   output: string;
   hwdec: string;
   buffer_s: number;
@@ -201,6 +205,9 @@ interface Rich {
   similar?: SimilarItem[];
   tmdb?: boolean;
   tmdb_error?: string;
+  imdb?: string;
+  imdb_rating?: number;
+  imdb_votes?: number;
 }
 
 export interface SeriesInfo extends Item, Rich {
@@ -301,6 +308,8 @@ export interface PlayerState {
   dropped?: number;
   cache_s?: number;
   aspect?: string;
+  sub_delay?: number;
+  sub_scale?: number;
 }
 
 export interface TestResult {
@@ -388,6 +397,7 @@ export const stream = {
   lock: () => api.post(`${S}/parental/lock`),
   parentalPin: (pin: string, new_pin: string) => api.post(`${S}/parental/pin`, { pin, new_pin }),
   settings: () => api.get<StreamSettings>(`${S}/settings`),
+  trailer: (id: string, title?: string) => api.post<{ ok: boolean; window: boolean }>(`${S}/trailer`, { id, title }),
   saveSettings: (p: Partial<StreamSettings>) => api.patch<StreamSettings>(`${S}/settings`, p),
   exportBackup: (path: string, password: string) => quiet.post<{ path: string; accounts: number }>(`${S}/backup/export`, { path, password }),
   importBackup: (path: string, password: string) => api.post<{ accounts: number }>(`${S}/backup/import`, { path, password }),

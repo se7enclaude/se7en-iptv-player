@@ -2,6 +2,20 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.3.0": {
+        "fr": ["Épisode suivant automatique : pendant le générique de fin, une carte propose l'épisode suivant et le lance après 10 s. « Rester » pour regarder le générique (réglable dans Paramètres › Lecture).",
+               "Sous-titres décalés ou trop petits : dans la liste des sous-titres, règle le décalage (par demi-seconde) et la taille. La taille est gardée pour les films suivants.",
+               "En plein écran, le bouton ⚙ donne la vitesse de lecture et le format d'image (Auto, 16:9, 4:3, 2,35, Remplir).",
+               "Image fluide : les images sont calées sur la fréquence de ton écran et fondues entre elles, pour des panoramiques et du foot sans saccades (activable ou non dans Paramètres › Lecture).",
+               "4K HDR mieux rendue : vraie image HDR si Windows est en mode HDR, sinon couleurs et luminosité adaptées scène par scène à ton écran.",
+               "Fiches plus complètes, même sans clé TMDB : note IMDb et nombre de votes, distribution avec photos (les têtes d'affiche d'abord), réalisation et bande-annonce. La bande-annonce se lit maintenant dans l'appli."],
+        "en": ["Next episode, automatically: during the end credits a card offers the next episode and starts it after 10 s. \"Stay\" to watch the credits (can be turned off in Settings › Playback).",
+               "Subtitles out of sync or too small: in the subtitle list, adjust the delay (by half a second) and the size. The size is kept for the next films.",
+               "In full screen, the ⚙ button gives playback speed and picture format (Auto, 16:9, 4:3, 2.35, Fill).",
+               "Smooth picture: frames are timed to your screen's refresh rate and blended, for judder-free pans and football (on or off in Settings › Playback).",
+               "Better 4K HDR: real HDR if Windows is in HDR mode, otherwise colours and brightness adapted scene by scene to your screen.",
+               "Richer film and series pages, even without a TMDB key: IMDb rating and vote count, cast with photos (stars first), director and trailer. Trailers now play inside the app."],
+    },
     "1.2.1": {
         "fr": ["Nouveau look du lecteur en plein écran : plus de bulles, des icônes nettes comme sur les grands services de streaming, une barre de lecture fine, le titre propre (« MobLand · S1 E2 · Épisode 2 » au lieu de « |FR| MobLand 01x02 (UHD) ») avec un badge 4K, et des listes de pistes plus lisibles.", "En fenêtre, plus de double barre : les boutons sont sous la vidéo, et sur l'image ne s'affichent que les messages.", "Les boutons Capture d'écran, Statistiques et Arrêter ont été retirés de la barre du lecteur."],
         "en": ["New full-screen player look: no more bubbles, crisp icons like the big streaming services, a thin progress bar, a clean title (\"MobLand · S1 E2 · Episode 2\" instead of \"|FR| MobLand 01x02 (UHD)\") with a 4K badge, and clearer track lists.", "In a window, no more double bar: the buttons sit under the video, and only messages show on the picture.", "The Screenshot, Statistics and Stop buttons were removed from the player bar."],
