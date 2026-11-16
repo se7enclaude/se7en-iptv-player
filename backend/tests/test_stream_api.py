@@ -169,3 +169,23 @@ def test_phone_remote(tmp_path):
     assert calls == [("zap", 1)]
     old = tok
     assert r.new_token() != old and tc.get(f"/r/{old}").status_code == 404
+
+
+def test_phone_remote_search_series_and_launch(api):
+    """Télécommande : chercher un film, ouvrir une série, lancer un épisode ou un film sur le PC."""
+    r = api.app.state.services.remote
+    mv = api.get("/api/stream/items/movie", headers=H).json()["items"][0]
+    res = r.command("search", mv["name"][:6])
+    assert any(x["id"] == mv["id"] for x in res["movie"]) and set(res) == {"live", "movie", "series"}
+    assert r.command("search", "x") == {"live": [], "movie": [], "series": []}
+    se = api.get("/api/stream/items/series", headers=H).json()["items"][0]
+    info = r.command("series", se["id"])
+    ep = info["seasons"][0]["episodes"][0]
+    n = len(api.played)
+    r.command("play_episode", {"id": ep["id"], "series": se["id"], "title": "S1 E1 · Pilote"})
+    assert api.played[n][1]["kind"] == "episode" and api.played[n][1]["series"] == se["id"]
+    r.command("play_movie", mv["id"])
+    assert api.played[-1][1]["kind"] == "movie" and api.played[-1][1]["id"] == mv["id"]
+    assert isinstance(r.command("home", None), list)
+    st = r.state()
+    assert {"position", "duration", "tracks", "skip_intro", "next_episode"} <= set(st)

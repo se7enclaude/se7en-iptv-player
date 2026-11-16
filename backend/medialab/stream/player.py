@@ -14,6 +14,8 @@ import sys
 import threading
 import time
 from ctypes import wintypes
+
+import numpy as np
 from pathlib import Path
 from typing import Any, Callable
 
@@ -21,6 +23,7 @@ from ..config import app_root
 from ..errors import MediaLabError
 from ..events import bus
 from ..logging_setup import get_logger
+from . import audio
 from .xtream import redact
 
 log = get_logger("player")
@@ -331,6 +334,8 @@ def osd(state: dict, W: int = 1920, H: int = 1080) -> tuple[str, list[dict]]:
     card = state.get("next_card")
     if card:
         hits[:0] = _next_card(ev, card, state, W, H)
+    elif state.get("skip_intro"):
+        hits[:0] = _skip_intro(ev, state, W, H)
     msg = state.get("message")
     if msg:
         t = _esc(msg)
@@ -766,6 +771,21 @@ def _opts_menu(ev: list[str], hits: list[dict], state: dict, W: int) -> None:
     hits.insert(sum(1 for h in hits if h["id"].startswith(("speed:", "aspect:"))), {"id": "menu_area", "x": mx, "y": my, "w": mw, "h": mh})
 
 
+def _skip_intro(ev: list[str], state: dict, W: int, H: int) -> list[dict]:
+    """« Passer l'intro » en bas à droite pendant le générique d'ouverture."""
+    hover = state.get("hover")
+    w, h = 250, 60
+    x = W - 72 - w
+    y = (H - 128 - 40 - h) if state.get("controls") else (H - 72 - h)
+    hot = bool(hover and x <= hover[0] <= x + w and y <= hover[1] <= y + h)
+    ev.append(_shape(_rr(x, y + 6, w, h, 14), "&H000000&", "90", blur=16))
+    ev.append(_shape(_rr(x, y, w, h, 14), WHITE if hot else "&HE6E6E6&"))
+    ev.append(_shape(_poly([(x + 28, y + 19), (x + 42, y + 30), (x + 28, y + 41)]) + " " +
+                     _poly([(x + 42, y + 19), (x + 56, y + 30), (x + 42, y + 41)]), "&H16120F&"))
+    ev.append(_text(x + 72, y + 30, "Passer l'intro", 24, col="&H16120F&", shadow=False))
+    return [{"id": "skip_intro", "x": x, "y": y, "w": w, "h": h}]
+
+
 NEXT_COUNTDOWN = 10.0  # secondes avant de lancer l'épisode suivant
 
 
@@ -797,6 +817,9 @@ def _next_card(ev: list[str], card: dict, state: dict, W: int, H: int) -> list[d
     ev.append(_text(sx + sw / 2, by + 25, "Rester", 22, an=5, shadow=False))
     return [{"id": "next_now", "x": bx, "y": by, "w": bw, "h": bh}, {"id": "next_stay", "x": sx, "y": by, "w": sw, "h": bh},
             {"id": "card_area", "x": x, "y": y, "w": w, "h": h}]
+
+
+AUDIO_PROBE = "@vad:lavfi=[ebur128=metadata=1]"
 
 
 def video_options(s: dict) -> dict:
@@ -845,6 +868,11 @@ class Player:
         self._restart_at = 0.0  # dernier redémarrage de l'image (playback-restart)
         self.menu: str | None = None  # liste ouverte au-dessus des boutons : "aid" (audio), "sid" (sous-titres), "opt"
         self._nx: dict | None = None  # carte « Épisode suivant » de l'épisode en cours
+        self.intro_mem = None  # audio.IntroMemory (réglé par l'API)
+        self.account_id: Callable[[], str] = lambda: ""
+        self._aud: dict | None = None  # mesures du son de ce qui joue
+        self._audio_thread = threading.Thread(target=self._audio_loop, name="player-audio", daemon=True)
+        self._audio_thread.start()
         self.hover: tuple[float, float] | None = None  # souris sur la vidéo, en coordonnées du bandeau (1920 × 1080)
 
     # ---------------------------------------------------------------- création
@@ -881,6 +909,8 @@ class Player:
                     alang=s.get("audio_lang", "fr,fre,fra,en,eng"), slang=s.get("sub_lang", "fr,fre,fra"),
                     subs_with_matching_audio="forced")
         opts.update(video_options(s))
+        # volume du son 10 fois par seconde (générique d'ouverture, recalage des sous-titres) ; le son n'est pas modifié
+        opts["af"] = AUDIO_PROBE
         if fonts.is_dir():
             opts.update(osd_fonts_dir=str(fonts), sub_fonts_dir=str(fonts))
         if os.environ.get("SE7EN_MPV_LOG"):  # diagnostic : journal complet de mpv dans ce fichier
@@ -1182,6 +1212,8 @@ class Player:
                    "audio-delay", "af", "hwdec", "volume", "mute", "ontop"}
         if prop not in allowed:
             raise MediaLabError("invalid", "Réglage du lecteur inconnu.")
+        if prop == "sub-delay" and self._aud:
+            self._aud["manual"] = True
         setattr(self.mpv, prop.replace("-", "_"), value)
 
     def add_subtitle(self, path: str) -> None:
@@ -1248,6 +1280,8 @@ class Player:
                 pass
             elif hid.startswith(("subdelay:", "subsize:", "speed:", "aspect:")):
                 self._menu_setting(hid)
+            elif hid == "skip_intro":
+                self.skip_intro()
             elif hid in ("next_now", "next_stay"):
                 self._next_choice(hid == "next_now")
             elif hid in ("audio", "subs", "opts"):
@@ -1286,6 +1320,8 @@ class Player:
             return
         try:
             if what == "subdelay":
+                if self._aud:
+                    self._aud["manual"] = True
                 d = 0.0 if val == "0" else round(float(m.sub_delay or 0) + (0.5 if val == "+" else -0.5), 1)
                 m.sub_delay = d
             elif what == "subsize":
@@ -1369,6 +1405,131 @@ class Player:
         ne["series"] = (self.item or {}).get("series")
         threading.Thread(target=self.on_action, args=("next_episode", ne), name="next-episode", daemon=True).start()
 
+    # ---------------------------------------------------------------- le son : intro, sous-titres
+    def _audio_loop(self) -> None:
+        """Volume du son 10 fois par seconde (filtre @vad), rangé par instant du film."""
+        n = 0
+        while True:
+            time.sleep(0.1)
+            m, it = self.mpv, self.item
+            if m is None or not it or it.get("kind") not in ("movie", "episode"):
+                continue
+            try:
+                if m.pause:
+                    continue
+                md = m._get_property("af-metadata/vad")
+                t = m.audio_pts
+                val = float((md or {}).get("lavfi.r128.M"))
+            except Exception:  # noqa: BLE001 — pas encore de son, filtre absent
+                continue
+            if t is None or t < 0:
+                continue
+            a = self._aud
+            if a is None or a.get("id") != it.get("id"):
+                a = self._aud = {"id": it.get("id"), "samples": {}, "intro": None, "tpl": None, "learned": False,
+                                 "synced": {}, "manual": False, "skipped": False}
+            a["samples"][int(round((float(t) - 0.1) * audio.RATE))] = val
+            n += 1
+            if n % 10 == 0:
+                try:
+                    self._audio_tick(a, float(t))
+                except Exception as e:  # noqa: BLE001
+                    log.debug("audio: %s", e)
+
+    def _audio_tick(self, a: dict, t: float) -> None:
+        """Toutes les secondes : reconnaître le générique, apprendre celui de la série, recaler les sous-titres."""
+        it = self.item or {}
+        acc, series = self.account_id(), it.get("series")
+        if it.get("kind") == "episode" and series and self.intro_mem is not None and t < audio.HEAD + 60:
+            if a["tpl"] is None:
+                a["tpl"] = self.intro_mem.template(acc, series) or False
+            if a["tpl"] and not a["skipped"] and (a["intro"] is None or t > a["intro"]):
+                tpl, dur = a["tpl"]
+                k = int(t * audio.RATE)
+                k0 = max(0, k - 40 * audio.RATE)  # les 40 dernières secondes entendues
+                live = audio.envelope({i - k0: v for i, v in a["samples"].items() if k0 <= i <= k})
+                start = audio.locate_start(live, tpl)
+                if start is not None and k0 / audio.RATE + start + dur - t > 4:
+                    a["intro"] = k0 / audio.RATE + start + dur  # fin du générique (instant du film)
+            if not a["learned"] and t >= audio.HEAD:
+                a["learned"] = True
+                head = audio.envelope(a["samples"], until=audio.HEAD)
+                measured = sum(1 for i in a["samples"] if i < audio.HEAD * audio.RATE)
+                if measured > 0.35 * audio.HEAD * audio.RATE:  # vu depuis le début : on peut s'en servir
+                    threading.Thread(target=self.intro_mem.learn, args=(acc, series, str(it.get("id")), head),
+                                     name="intro-learn", daemon=True).start()
+        if self.settings().get("auto_sync", True) and not a["manual"] and int(t) % 20 == 0:
+            self._resync(a)
+
+    def _resync(self, a: dict) -> None:
+        m = self.mpv
+        if m is None:
+            return
+        tr = next((x for x in (m.track_list or []) if x.get("type") == "sub" and x.get("selected") and x.get("external")), None)
+        path = (tr or {}).get("external-filename")
+        if not path:
+            return
+        done = a["synced"].get(tr["id"])
+        n = len(a["samples"])
+        if done and (done["n"] * 2 > n or done.get("final")):  # recalculé quand on a deux fois plus de son
+            return
+        keys = np.fromiter(a["samples"].keys(), dtype=np.int64)
+        vals = np.fromiter(a["samples"].values(), dtype=np.float32)
+        size = int(keys.max()) + 1
+        env = np.full(size, audio.FLOOR, dtype=np.float32)
+        known = np.zeros(size, dtype=bool)
+        ok = keys >= 0
+        env[keys[ok]] = np.maximum(audio.FLOOR, vals[ok])
+        known[keys[ok]] = True
+        res = audio.best_offset(env, known, audio.cues(path))
+        a["synced"][tr["id"]] = {"n": n, "final": n > 40 * 60 * audio.RATE}
+        if not res:
+            return
+        cur_d, cur_s = float(m.sub_delay or 0), float(m.sub_speed or 1)
+        if abs(res["delay"] - cur_d) < 0.3 and abs(res["speed"] - cur_s) < 0.001:
+            return
+        m.sub_speed = res["speed"]
+        m.sub_delay = res["delay"]
+        log.info("Subtitles resynced: delay %.1f s, speed %.4f (score %.2f)", res["delay"], res["speed"], res["score"])
+        self.flash(f"Sous-titres recalés automatiquement ({res['delay']:+.1f} s)".replace(".", ","), 3)
+
+    def _intro_visible(self, st: dict) -> bool:
+        """Le bouton « Passer l'intro » : générique reconnu par le son, ou chapitre « Intro / Générique »."""
+        a = self._aud
+        pos = float(st.get("position") or 0)
+        if a and a.get("id") == (self.item or {}).get("id") and a.get("intro") and not a.get("skipped") and pos < a["intro"] - 2:
+            return True
+        end = self._intro_chapter(pos)
+        return end is not None and not (a or {}).get("skipped") and pos < end - 2
+
+    def _intro_chapter(self, pos: float) -> float | None:
+        it = self.item or {}
+        if "intro_ch" not in it:
+            found = None
+            try:
+                chs = self.mpv.chapter_list or []
+                for k, ch in enumerate(chs):
+                    if re.search(r"\b(intro|opening|ouverture|g[ée]n[ée]rique d.?ouverture|opening credits)\b", str(ch.get("title") or ""), re.I) \
+                            and k + 1 < len(chs) and float(ch.get("time") or 0) < 600:
+                        found = (float(ch.get("time") or 0), float(chs[k + 1]["time"]))
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+            it["intro_ch"] = found
+        ch = it.get("intro_ch")
+        return ch[1] if ch and ch[0] <= pos < ch[1] else None
+
+    def skip_intro(self) -> bool:
+        a = self._aud
+        pos = float(getattr(self.mpv, "time_pos", 0) or 0) if self.mpv else 0.0
+        end = (a or {}).get("intro") or self._intro_chapter(pos)
+        if not end:
+            return False
+        if a:
+            a["skipped"] = True
+        self.seek(float(end), absolute=True)
+        return True
+
     def _osd_loop(self) -> None:
         last = None
         last_m = None
@@ -1385,13 +1546,14 @@ class Player:
             try:
                 st = self.snapshot(light=not self.menu)
                 card = self._next_state(st) if self.item else None
+                intro = self._intro_visible(st) if self.item and not card else False
                 visible = bool(self.item) and (time.monotonic() < self.osd_until or st.get("paused") or st.get("buffering")
-                                               or self.menu is not None or card is not None)
+                                               or self.menu is not None or card is not None or intro)
                 if self.message and time.monotonic() > self.message[1]:
                     self.message = None
                 if visible:
                     data, self.hits = osd({**(self.item or {}), **st, "controls": self.fullscreen, "fullscreen": self.fullscreen,
-                                           "hover": self.hover, "menu": self.menu, "next_card": card,
+                                           "hover": self.hover, "menu": self.menu, "next_card": card, "skip_intro": intro,
                                            "message": self.message[0] if self.message else None})
                 else:
                     data, self.hits = "", []

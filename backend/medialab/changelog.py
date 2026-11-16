@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.4.0": {
+        "fr": ["Passer l'intro : l'appli reconnaît le générique d'ouverture d'une série à sa musique (elle l'apprend dès que tu as vu deux épisodes depuis le début) et affiche « Passer l'intro » pendant qu'il passe. Aussi quand le fichier a un chapitre « Intro ».",
+               "Sous-titres recalés automatiquement : les sous-titres trouvés en ligne ou ajoutés à la main qui arrivent trop tôt, trop tard ou qui dérivent sont recalés sur les voix du film après quelques minutes (réglable dans Paramètres › Lecture). Si tu règles le décalage toi-même, l'appli n'y touche plus.",
+               "Télécommande iPhone améliorée : cherche un film, une série ou une chaîne et lance-le sur le PC, reprends ce que tu regardais, choisis l'épisode d'une série, avance dans le film avec la barre de lecture, change de langue ou de sous-titres, « Passer l'intro » et « Épisode suivant » depuis le téléphone."],
+        "en": ["Skip intro: the app recognises a series' opening credits by their music (it learns them once you have watched two episodes from the start) and shows \"Skip intro\" while they play. Also when the file has an \"Intro\" chapter.",
+               "Subtitles resynced automatically: subtitles found online or added by hand that come too early, too late or drift are realigned on the film's voices after a few minutes (Settings › Playback). If you set the delay yourself, the app leaves it alone.",
+               "Better iPhone remote: search a film, series or channel and start it on the PC, resume what you were watching, pick a series episode, move through the film with the progress bar, change language or subtitles, \"Skip intro\" and \"Next episode\" from the phone."],
+    },
     "1.3.0": {
         "fr": ["Épisode suivant automatique : pendant le générique de fin, une carte propose l'épisode suivant et le lance après 10 s. « Rester » pour regarder le générique (réglable dans Paramètres › Lecture).",
                "Sous-titres décalés ou trop petits : dans la liste des sous-titres, règle le décalage (par demi-seconde) et la taille. La taille est gardée pour les films suivants.",

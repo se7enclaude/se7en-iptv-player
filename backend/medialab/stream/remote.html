@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0e">
 <meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="se7en">
 <title>Télécommande · se7en IPTV Player</title>
 <style>
   :root { --bg: #0b0b0e; --card: rgba(255,255,255,.07); --line: rgba(255,255,255,.12); --text: #f4f4f6; --muted: rgba(244,244,246,.6);
-          --accent: #ee2e37; --ok: #fff; }
+          --accent: #ee2e37; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif; }
   body { padding: max(14px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; user-select: none; }
@@ -17,44 +20,60 @@
   .brand b { color: var(--accent); }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: #3c3; box-shadow: 0 0 10px #3c3; }
   .dot.off { background: #c33; box-shadow: 0 0 10px #c33; }
-  .now { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); min-height: 84px; }
+  .now { padding: 14px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); }
+  .now-top { display: flex; gap: 12px; align-items: center; min-height: 56px; }
   .logo { width: 56px; height: 56px; border-radius: 14px; background: #fff; display: grid; place-items: center; overflow: hidden; flex: none; color: #111; font-weight: 800; }
   .logo img { width: 82%; height: 82%; object-fit: contain; }
-  .now-text { min-width: 0; }
+  .now-text { min-width: 0; flex: 1; }
   .now-title { font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .now-prog { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-  .bar { height: 4px; border-radius: 4px; background: rgba(255,255,255,.15); margin-top: 8px; overflow: hidden; }
+  .bar { height: 4px; border-radius: 4px; background: rgba(255,255,255,.15); margin-top: 8px; overflow: hidden; display: block; }
   .bar i { display: block; height: 100%; background: var(--accent); width: 0; }
-  .pad { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 12px; margin-top: 18px; align-items: stretch; }
+  .seek { display: none; margin-top: 12px; }
+  .seek.show { display: block; }
+  .seek-row { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+  input[type=range] { flex: 1; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 6px; background: rgba(255,255,255,.18); outline: none; margin: 0; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  .chips { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .chips:empty { display: none; }
+  .chip { min-height: 38px; padding: 0 14px; border-radius: 99px; font-size: 13px; font-weight: 600; flex: none; }
+  .chip.hot { background: #fff; color: #0b0b0e; border-color: #fff; }
+  select { height: 38px; border-radius: 99px; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 0 12px; font: inherit; font-size: 13px; max-width: 100%; }
+  .pad { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 12px; margin-top: 16px; align-items: stretch; }
   button { font: inherit; color: inherit; border: 1px solid var(--line); background: var(--card); border-radius: 20px; min-height: 64px; cursor: pointer;
            display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation; transition: transform .08s, background .15s; }
   button:active { transform: scale(.96); background: rgba(255,255,255,.16); }
   button svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .col { display: grid; gap: 12px; }
-  .big { min-height: 88px; font-weight: 700; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
+  .big { min-height: 84px; font-weight: 700; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
   .big svg { width: 32px; height: 32px; color: var(--text); }
   .play { background: #fff; color: #0b0b0e; border-color: #fff; }
   .play svg { color: #0b0b0e; }
-  .play:active { background: #ddd; }
   .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
   .row button { min-height: 56px; font-size: 12px; flex-direction: column; gap: 2px; color: var(--muted); }
   .row button svg { width: 22px; height: 22px; color: var(--text); }
   .on { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
   .on svg { color: #fff !important; }
-  .tabs { display: flex; gap: 8px; margin: 22px 0 10px; }
+  .tabs { display: flex; gap: 8px; margin: 22px 0 10px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
   .tabs button { min-height: 40px; padding: 0 16px; border-radius: 99px; font-size: 14px; flex: none; }
   .tabs button.sel { background: #fff; color: #0b0b0e; border-color: #fff; }
   .digits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .digits button { min-height: 60px; font-size: 22px; font-weight: 700; }
   .list { display: flex; flex-direction: column; gap: 6px; }
-  .ch { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 6px 12px; justify-content: flex-start; border-radius: 16px; text-align: left; }
+  .ch { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 6px 12px; justify-content: flex-start; border-radius: 16px; text-align: left; width: 100%; }
   .ch .logo { width: 40px; height: 40px; border-radius: 10px; font-size: 12px; }
+  .ch .poster { width: 40px; height: 58px; border-radius: 8px; background: #222; overflow: hidden; flex: none; }
+  .ch .poster img { width: 100%; height: 100%; object-fit: cover; }
   .ch-num { width: 30px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; flex: none; }
-  .ch-text { min-width: 0; display: flex; flex-direction: column; }
+  .ch-text { min-width: 0; display: flex; flex-direction: column; flex: 1; }
   .ch-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ch-now { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ch .bar { margin-top: 5px; }
   .ch.cur { border-color: var(--accent); }
-  input { width: 100%; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 0 14px; font: inherit; margin-bottom: 10px; }
+  h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 16px 4px 8px; text-transform: uppercase; letter-spacing: .04em; }
+  input.q { width: 100%; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 0 14px; font: inherit; margin-bottom: 10px; }
+  .back { min-height: 40px; padding: 0 14px; border-radius: 99px; font-size: 14px; margin-bottom: 4px; display: inline-flex; }
   .toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); background: #2a2b31; padding: 10px 16px; border-radius: 14px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%; }
   .toast.show { opacity: 1; }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
@@ -67,12 +86,18 @@
 </header>
 
 <section class="now" id="now">
-  <div class="logo" id="logo">7</div>
-  <div class="now-text">
-    <div class="now-title" id="title">Rien en lecture</div>
-    <div class="now-prog" id="prog">Choisis une chaîne ci-dessous</div>
-    <div class="bar"><i id="progress"></i></div>
+  <div class="now-top">
+    <div class="logo" id="logo">7</div>
+    <div class="now-text">
+      <div class="now-title" id="title">Rien en lecture</div>
+      <div class="now-prog" id="prog">Choisis une chaîne, un film ou une série ci-dessous</div>
+      <div class="bar" id="livebar"><i id="progress"></i></div>
+    </div>
   </div>
+  <div class="seek" id="seek">
+    <div class="seek-row"><span id="pos">0:00</span><input type="range" id="range" min="0" max="100" step="1" value="0" aria-label="Position"><span id="dur">0:00</span></div>
+  </div>
+  <div class="chips" id="chips"></div>
 </section>
 
 <section class="pad">
@@ -84,10 +109,7 @@
     <button class="big play" id="pause" data-cmd="pause" aria-label="Lecture / pause"><svg viewBox="0 0 24 24" id="pauseIcon"><path d="M8 5v14M16 5v14"/></svg></button>
     <button class="big" data-cmd="mute" id="mute" aria-label="Couper le son"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="m22 9-6 6M16 9l6 6"/></svg>Muet</button>
   </div>
-  <div class="col">
-    <button class="big" data-cmd="zap" data-value="-1" aria-label="Chaîne précédente dans la liste"><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>Chaîne</button>
-    <button class="big" data-cmd="zap" data-value="1" aria-label="Chaîne suivante dans la liste"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>Chaîne</button>
-  </div>
+  <div class="col" id="side"></div>
 </section>
 
 <section class="row">
@@ -99,6 +121,8 @@
 
 <nav class="tabs">
   <button data-tab="channels" class="sel">Chaînes</button>
+  <button data-tab="search">Chercher</button>
+  <button data-tab="resume">Reprendre</button>
   <button data-tab="favorites">Favoris</button>
   <button data-tab="digits">Numéro</button>
 </nav>
@@ -109,51 +133,111 @@
 (() => {
   const base = location.pathname.replace(/\/$/, "");
   const $ = (id) => document.getElementById(id);
-  let state = null, tab = "channels", filter = "", lastDraw = "";
+  let state = null, tab = "channels", filter = "", lastDraw = "", dragging = false;
+  let query = "", results = null, series = null, season = null, resume = null, searchTimer = 0;
 
   const toast = (t) => { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200); };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const logo = (src, name) => src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(document.createTextNode('${esc((name || "?").slice(0, 3)).replace(/'/g, "")}'))">` : esc((name || "?").slice(0, 3));
+  const poster = (src) => `<span class="poster">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}</span>`;
   const hm = (t) => new Date(t * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`; };
+  const icon = { up: '<path d="m6 15 6-6 6 6"/>', down: '<path d="m6 9 6 6 6-6"/>', back: '<path d="M11 17 6 12l5-5M18 17l-5-5 5-5"/>', fwd: '<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>' };
 
+  async function send(c, v) {
+    const r = await fetch(base + "/api/cmd", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cmd: c, value: v }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) throw new Error(d.error || "Action impossible");
+    return d.result;
+  }
   async function cmd(c, v) {
     if (navigator.vibrate) navigator.vibrate(12);
-    try {
-      const r = await fetch(base + "/api/cmd", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cmd: c, value: v }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || d.ok === false) toast(d.error || "Action impossible");
-      setTimeout(poll, 250);
-    } catch { toast("PC injoignable"); }
+    try { const res = await send(c, v); setTimeout(poll, 250); return res; } catch (e) { toast(e.message === "Failed to fetch" ? "PC injoignable" : e.message); }
   }
 
   function drawNow() {
     const s = state || {};
+    const vod = s.playing && s.kind !== "live" && s.duration > 0;
     $("title").textContent = s.playing ? `${s.number ? s.number + " · " : ""}${s.title}` : "Rien en lecture";
-    $("prog").textContent = s.now ? `${hm(s.now.start)} ${s.now.title}${s.next ? `  ·  ensuite ${s.next.title}` : ""}` : (s.playing ? (s.subtitle || "") : "Choisis une chaîne ci-dessous");
+    $("prog").textContent = s.now ? `${hm(s.now.start)} ${s.now.title}${s.next ? `  ·  ensuite ${s.next.title}` : ""}` : (s.playing ? (s.subtitle || "") : "Choisis une chaîne, un film ou une série ci-dessous");
     const p = s.now ? Math.max(0, Math.min(1, (Date.now() / 1000 - s.now.start) / Math.max(1, s.now.stop - s.now.start))) : 0;
     $("progress").style.width = `${p * 100}%`;
+    $("livebar").style.display = s.now ? "" : "none";
     $("logo").innerHTML = s.playing ? logo(s.logo, s.title) : "7";
     $("vol").textContent = s.playing ? (s.muted ? "Muet" : `${s.volume} %`) : "—";
     $("mute").classList.toggle("on", !!s.muted);
     $("fs").classList.toggle("on", !!s.fullscreen);
     $("pauseIcon").innerHTML = s.paused ? '<path d="M7 4v16l13-8z"/>' : '<path d="M8 5v14M16 5v14"/>';
+    // barre de lecture (films, épisodes)
+    $("seek").classList.toggle("show", vod);
+    if (vod && !dragging) { $("range").max = Math.floor(s.duration); $("range").value = Math.floor(s.position); $("pos").textContent = clock(s.position); $("dur").textContent = clock(s.duration); }
+    // à droite : chaîne − / + en direct, −10 / +10 s pour un film ou un épisode
+    const sideKey = vod ? "vod" : "live";
+    if ($("side").dataset.k !== sideKey) {
+      const side = vod ? [["seek", -10, icon.back, "−10 s"], ["seek", 10, icon.fwd, "+10 s"]] : [["zap", -1, icon.up, "Chaîne"], ["zap", 1, icon.down, "Chaîne"]];
+      $("side").dataset.k = sideKey;
+      $("side").innerHTML = side.map(([c, v, ic, l]) => `<button class="big" data-cmd="${c}" data-value="${v}"><svg viewBox="0 0 24 24">${ic}</svg>${l}</button>`).join("");
+    }
+    // pastilles : passer l'intro, épisode suivant, langue, sous-titres
+    const audio = (s.tracks || []).filter((t) => t.type === "audio"), subs = (s.tracks || []).filter((t) => t.type === "sub");
+    let html = "";
+    if (s.skip_intro) html += `<button class="chip hot" data-cmd="skip_intro">Passer l'intro</button>`;
+    if (s.next_episode) html += `<button class="chip" data-cmd="next_episode">Épisode suivant ›</button>`;
+    if (audio.length > 1) html += `<select data-track="aid" aria-label="Langue audio">${audio.map((t) => `<option value="${t.id}"${t.selected ? " selected" : ""}>🔊 ${esc(t.label)}</option>`).join("")}</select>`;
+    if (subs.length) html += `<select data-track="sid" aria-label="Sous-titres"><option value="no"${subs.some((t) => t.selected) ? "" : " selected"}>💬 Sans sous-titres</option>${subs.map((t) => `<option value="${t.id}"${t.selected ? " selected" : ""}>💬 ${esc(t.label)}</option>`).join("")}</select>`;
+    if ($("chips").dataset.h !== html && !(document.activeElement && document.activeElement.tagName === "SELECT")) { $("chips").dataset.h = html; $("chips").innerHTML = html; }
   }
 
-  function drawPanel() {
+  const row = (attrs, left, name, sub, extra = "") =>
+    `<button class="ch" ${attrs}>${left}<span class="ch-text"><span class="ch-name">${esc(name)}</span>${sub ? `<span class="ch-now">${esc(sub)}</span>` : ""}${extra}</span></button>`;
+
+  function drawPanel(force) {
     const s = state || {};
-    const key = JSON.stringify([tab, filter, s.id, tab === "digits" ? 0 : (tab === "favorites" ? s.favorites : s.channels)]);
-    if (key === lastDraw) return; // unchanged: keep the list (and its scroll) as it is
+    const key = JSON.stringify([tab, filter, s.id, query, !!results, series && series.id, season, !!resume,
+      tab === "channels" ? s.channels : tab === "favorites" ? s.favorites : 0]);
+    if (key === lastDraw && !force) return; // inchangé : la liste (et où on en est) reste telle quelle
     lastDraw = key;
     const panel = $("panel");
+    const focus = document.activeElement && document.activeElement.id === "q";
     if (tab === "digits") {
       panel.innerHTML = `<div class="digits">${[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, ""].map((d) => d === "" ? "<span></span>" : `<button data-digit="${d}">${d}</button>`).join("")}</div>`;
+      return;
+    }
+    if (tab === "search" && series) {
+      const seasons = series.seasons || [];
+      const cur = seasons.find((x) => x.season === season) || seasons[0];
+      panel.innerHTML = `<button class="back" data-act="unseries">‹ Résultats</button><h3>${esc(series.name || "")}</h3>` +
+        (seasons.length > 1 ? `<div class="chips" style="margin:0 0 10px">${seasons.map((x) => `<button class="chip${x === cur ? " hot" : ""}" data-season="${esc(x.season)}">Saison ${esc(x.season)}</button>`).join("")}</div>` : "") +
+        `<div class="list">${(cur ? cur.episodes : []).map((e) => row(`data-ep="${esc(e.id)}" data-eptitle="${esc(`S${cur.season} E${e.episode ?? "?"}${e.title ? " · " + e.title : ""}`)}"`,
+          `<span class="ch-num">${e.episode ?? ""}</span>`, e.title || `Épisode ${e.episode ?? ""}`, e.watched ? "Vu" : (e.progress > 0.01 ? `Commencé · ${Math.round(e.progress * 100)} %` : ""))).join("")}</div>`;
+      return;
+    }
+    if (tab === "search") {
+      let html = `<input class="q" id="q" placeholder="Film, série ou chaîne" value="${esc(query)}" autocomplete="off" enterkeyhint="search">`;
+      if (results) {
+        const block = (title, list, render) => list.length ? `<h3>${title}</h3><div class="list">${list.map(render).join("")}</div>` : "";
+        html += block("Films", results.movie, (r) => row(`data-movie="${esc(r.id)}"`, poster(r.logo), r.name, r.year || "")) +
+          block("Séries", results.series, (r) => row(`data-series="${esc(r.id)}"`, poster(r.logo), r.name, r.year || "")) +
+          block("Chaînes", results.live, (r) => row(`data-ch="${esc(r.id)}"`, `<span class="logo">${logo(r.logo, r.name)}</span>`, r.name, ""));
+        if (!results.movie.length && !results.series.length && !results.live.length) html += `<div class="empty">Rien trouvé.</div>`;
+      } else html += `<div class="empty">Tape au moins deux lettres.</div>`;
+      panel.innerHTML = html;
+      const q = $("q");
+      q.oninput = () => { query = q.value; clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 350); };
+      if (focus) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+      return;
+    }
+    if (tab === "resume") {
+      if (!resume) { panel.innerHTML = `<div class="empty">Chargement…</div>`; return; }
+      panel.innerHTML = resume.length ? `<div class="list">${resume.map((r) => row(r.type === "movie" ? `data-movie="${esc(r.item)}"` : `data-ep="${esc(r.item)}" data-epseries="${esc(r.series || "")}" data-eptitle="${esc(r.title)}"`,
+        poster(r.logo), r.title, r.type === "movie" ? "Film" : "Épisode", `<span class="bar"><i style="width:${Math.round((r.progress || 0) * 100)}%"></i></span>`)).join("")}</div>`
+        : `<div class="empty">Rien en cours.</div>`;
       return;
     }
     const rows = (tab === "favorites" ? s.favorites : s.channels) || [];
     const f = filter.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     const shown = f ? rows.filter((c) => c.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(f)) : rows;
-    const focus = document.activeElement && document.activeElement.id === "q";
-    panel.innerHTML = `<input id="q" placeholder="Chercher une chaîne" value="${esc(filter)}" autocomplete="off">` +
+    panel.innerHTML = `<input class="q" id="q" placeholder="Chercher une chaîne" value="${esc(filter)}" autocomplete="off">` +
       (shown.length ? `<div class="list">${shown.map((c) => `<button class="ch${c.id === s.id ? " cur" : ""}" data-ch="${esc(c.id)}">
         <span class="ch-num">${c.num ?? ""}</span><span class="logo">${logo(c.logo, c.name)}</span>
         <span class="ch-text"><span class="ch-name">${esc(c.name)}</span><span class="ch-now">${esc(c.now || "")}</span></span></button>`).join("")}</div>`
@@ -161,6 +245,12 @@
     const q = $("q");
     q.oninput = () => { filter = q.value; lastDraw = ""; drawPanel(); };
     if (focus) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  }
+
+  async function runSearch() {
+    if (query.trim().length < 2) { results = null; drawPanel(true); return; }
+    try { results = await send("search", query); } catch (e) { toast(e.message); }
+    drawPanel(true);
   }
 
   async function poll() {
@@ -174,20 +264,36 @@
     } catch { $("dot").classList.add("off"); }
   }
 
-  document.addEventListener("click", (e) => {
+  const range = $("range");
+  range.addEventListener("input", () => { dragging = true; $("pos").textContent = clock(Number(range.value)); });
+  range.addEventListener("change", () => { cmd("seek_to", Number(range.value)); setTimeout(() => { dragging = false; }, 1200); });
+  document.addEventListener("change", (e) => { const t = e.target; if (t.dataset && t.dataset.track) cmd(t.dataset.track, t.value); });
+
+  document.addEventListener("click", async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    if (b.dataset.cmd) cmd(b.dataset.cmd, b.dataset.value !== undefined ? Number(b.dataset.value) : undefined);
-    else if (b.dataset.ch) cmd("channel", b.dataset.ch);
-    else if (b.dataset.digit !== undefined) cmd("digit", b.dataset.digit);
-    else if (b.dataset.tab) {
-      tab = b.dataset.tab; lastDraw = "";
+    const d = b.dataset;
+    if (d.cmd) cmd(d.cmd, d.value !== undefined ? Number(d.value) : undefined);
+    else if (d.ch) cmd("channel", d.ch);
+    else if (d.digit !== undefined) cmd("digit", d.digit);
+    else if (d.movie) { await cmd("play_movie", d.movie); toast("Lancé sur le PC"); }
+    else if (d.ep) { await cmd("play_episode", { id: d.ep, series: d.epseries || (series && series.id), title: d.eptitle }); toast("Lancé sur le PC"); }
+    else if (d.series) {
+      try { series = await send("series", d.series); season = (series.seasons[0] || {}).season; } catch (er) { toast(er.message); }
+      drawPanel(true);
+      window.scrollTo({ top: $("panel").offsetTop - 12, behavior: "smooth" });
+    }
+    else if (d.season) { season = d.season; drawPanel(true); }
+    else if (d.act === "unseries") { series = null; drawPanel(true); }
+    else if (d.tab) {
+      tab = d.tab; lastDraw = "";
       document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("sel", x === b));
-      drawPanel();
+      if (tab === "resume") { resume = null; drawPanel(true); try { resume = await send("home"); } catch (er) { resume = []; toast(er.message); } }
+      drawPanel(true);
     }
   });
   poll();
-  setInterval(poll, 2000);
+  setInterval(poll, 1500);
   document.addEventListener("visibilitychange", () => !document.hidden && poll());
 })();
 </script>

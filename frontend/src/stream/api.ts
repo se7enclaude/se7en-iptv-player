@@ -68,6 +68,7 @@ export interface StreamSettings {
   smooth?: boolean;
   hdr?: boolean;
   sub_scale?: number;
+  auto_sync?: boolean;
   output: string;
   hwdec: string;
   buffer_s: number;

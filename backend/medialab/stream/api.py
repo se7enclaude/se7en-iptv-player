@@ -32,7 +32,7 @@ DEFAULTS = {"output": "ts", "hwdec": "auto-safe", "buffer_s": 10, "buffer_mb": 1
             "sub_lang": "fr,fre,fra", "record_folder": "", "margin_before": 1, "margin_after": 3, "refresh_hours": 12,
             "refresh_on_start": True, "hide_adult": True, "parental_pin": None, "volume": 100, "user_agent": "",
             "language": "fr", "group_quality": True, "quality_pref": "best", "instant_zap": True,
-            "remote": False, "auto_next": True, "smooth": True, "hdr": True, "sub_scale": 1.0}
+            "remote": False, "auto_next": True, "smooth": True, "hdr": True, "sub_scale": 1.0, "auto_sync": True}
 
 
 class Session:
@@ -467,11 +467,16 @@ def register(app: FastAPI, S) -> None:
     def remote_state() -> dict:
         a = store.account(sess.account) if sess.account else None
         item = player.item or {}
-        st = player.snapshot(light=True)
-        out: dict = {"playing": bool(player.item), "title": item.get("title") or "", "subtitle": item.get("subtitle") or "",
+        st = player.snapshot()
+        out: dict = {"playing": bool(player.item), "title": item.get("display_title") or item.get("title") or "",
+                     "subtitle": item.get("display_subtitle") or item.get("subtitle") or "",
                      "kind": item.get("kind") or "", "id": item.get("id") or "", "number": item.get("number"),
                      "logo": item.get("logo") or "", "paused": bool(st.get("paused")), "volume": int(st.get("volume") or 0),
-                     "muted": bool(st.get("muted")), "fullscreen": sess.fullscreen, "channels": [], "favorites": []}
+                     "muted": bool(st.get("muted")), "fullscreen": sess.fullscreen, "channels": [], "favorites": [],
+                     "position": st.get("position") or 0, "duration": st.get("duration") or 0,
+                     "tracks": [{k: t.get(k) for k in ("id", "type", "label", "selected")} for t in st.get("tracks") or []],
+                     "skip_intro": bool(player.item) and player._intro_visible(st),
+                     "next_episode": (item.get("next_ep") or {}).get("label") if item.get("kind") == "episode" else None}
         if not a:
             return out
         if item.get("kind") == "live":
@@ -515,9 +520,58 @@ def register(app: FastAPI, S) -> None:
             conns.release(sess.account or "", "preload")
         elif cmd == "osd":
             player.show_osd(6)
+        elif cmd == "seek_to":
+            player.seek(max(0.0, float(value or 0)), absolute=True)
+        elif cmd in ("aid", "sid"):
+            v = "no" if str(value) == "no" else int(value)
+            player.set(cmd, v)
+            remember_track(cmd, v)
+        elif cmd == "skip_intro":
+            player.skip_intro()
+        elif cmd == "next_episode":
+            ne = dict((player.item or {}).get("next_ep") or {})
+            if ne:
+                on_action("next_episode", {**ne, "series": (player.item or {}).get("series")})
+        elif cmd == "play_movie":
+            play(PlayBody(type="movie", id=str(value)))
+            bus.publish("player", {"event": "remote_play"})
+        elif cmd == "play_episode":
+            v = value if isinstance(value, dict) else {}
+            play(PlayBody(type="episode", id=str(v.get("id")), series=str(v.get("series") or ""), title=v.get("title")))
+            bus.publish("player", {"event": "remote_play"})
+        elif cmd == "search":
+            return remote_search(str(value or ""))
+        elif cmd == "series":
+            return remote_series(str(value or ""))
+        elif cmd == "home":
+            a = sess.require_account()
+            return [{"type": r["type"], "item": r["item"], "title": r["title"], "logo": r["logo"], "progress": r["progress"],
+                     "series": (r.get("extra") or {}).get("series")} for r in catalog.continue_watching(store, sess.profile, a["id"], 12)]
         else:
             raise MediaLabError("invalid", "Action inconnue.")
         return None
+
+    def remote_search(q: str) -> dict:
+        a = sess.require_account()
+        if len(q.strip()) < 2:
+            return {"live": [], "movie": [], "series": []}
+        from . import search as smart
+        res = smart.search(store, a["id"], sess.profile, sess.show_adult(), q, sess.quality(), limit=15)
+        return {typ: [{"id": r["id"], "name": r.get("name"), "logo": r.get("logo"), "year": r.get("year")} for r in res.get(typ) or []]
+                for typ in ("live", "movie", "series")}
+
+    def remote_series(sid: str) -> dict:
+        a = sess.require_account()
+        c = client(a) if a["kind"] == "xtream" else None
+        try:
+            info = catalog.series_info(store, c, a["id"], sid, sess.profile)
+        finally:
+            if c:
+                c.close()
+        return {"id": sid, "name": info.get("name"), "logo": info.get("logo"), "seasons": [
+            {"season": se.get("season"), "episodes": [{"id": e.get("id"), "episode": e.get("episode"), "title": e.get("title"),
+                                                       "watched": e.get("watched"), "progress": e.get("progress")}
+                                                      for e in se.get("episodes") or []]} for se in info.get("seasons") or []]}
 
     from .remote import DEFAULT_PORT, Remote
     remote = Remote(store, remote_state, remote_command)
@@ -635,6 +689,9 @@ def register(app: FastAPI, S) -> None:
         except MediaLabError as e:
             player.flash(e.message, 4)
     player.on_action = on_action
+    from .audio import IntroMemory
+    player.intro_mem = IntroMemory(store)
+    player.account_id = lambda: sess.account or ""
 
     @app.post("/api/stream/play")
     async def play_route(body: PlayBody):

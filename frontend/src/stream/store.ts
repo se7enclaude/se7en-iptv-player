@@ -158,6 +158,7 @@ events.on((ev) => {
       else if (d.event === "stop") useStream.setState({ now: null, theater: false }); // e.g. from the phone remote
       else if (d.event === "zapped") stream.player().then((p) => useStream.setState({ now: p.item ?? null })).catch(() => undefined);
       else if (d.event === "ended" && d.item?.kind === "episode") nextEpisode(d.item).catch(toastError);
+      else if (d.event === "remote_play") useApp.getState().setPage("watch" as any); // film / épisode lancé depuis le téléphone
       else if (d.event === "ended") s.stop();
       else if (d.event === "error") useApp.getState().toast({ kind: "error", title: d.message });
       else if (d.event === "action" && d.action === "click") window.dispatchEvent(new CustomEvent("se7en:player-click"));

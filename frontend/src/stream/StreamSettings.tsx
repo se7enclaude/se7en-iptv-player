@@ -236,6 +236,9 @@ export function PlaybackSettings() {
       <Row title="Épisode suivant automatique" desc="Pendant le générique de fin, une carte propose l'épisode suivant et le lance après 10 s (« Rester » pour regarder le générique).">
         <Switch checked={s.auto_next !== false} onChange={(v) => upd({ auto_next: v })} />
       </Row>
+      <Row title="Sous-titres recalés automatiquement" desc="Les sous-titres trouvés en ligne (ou ajoutés à la main) qui arrivent trop tôt ou trop tard sont recalés sur les voix du film après quelques minutes. Si tu règles le décalage toi-même, l'appli n'y touche plus.">
+        <Switch checked={s.auto_sync !== false} onChange={(v) => upd({ auto_sync: v })} />
+      </Row>
       <Row title="Image fluide" desc="Les images sont calées sur la fréquence de ton écran (240 Hz) et fondues entre elles : plus de saccades dans les panoramiques ni sur le foot. Aucune image n'est inventée, donc pas d'« effet feuilleton ».">
         <Switch checked={s.smooth !== false} onChange={(v) => upd({ smooth: v })} />
       </Row>
