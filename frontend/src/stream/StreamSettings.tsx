@@ -242,6 +242,7 @@ export function PlaybackSettings() {
       <Row title="Image fluide" desc="Les images sont calées sur la fréquence de ton écran (240 Hz) et fondues entre elles : plus de saccades dans les panoramiques ni sur le foot. Aucune image n'est inventée, donc pas d'« effet feuilleton ».">
         <Switch checked={s.smooth !== false} onChange={(v) => upd({ smooth: v })} />
       </Row>
+      <InterpRow on={!!s.interpolation} onChange={(v) => upd({ interpolation: v })} />
       <Row title="4K HDR amélioré" desc="Films HDR : vraie image HDR si Windows est en mode HDR, sinon couleurs et luminosité adaptées scène par scène à ton écran (plus de 4K terne ou délavée).">
         <Switch checked={s.hdr !== false} onChange={(v) => upd({ hdr: v })} />
       </Row>
@@ -262,6 +263,30 @@ export function PlaybackSettings() {
       </Row>
       <TmdbRow on={!!s.tmdb} />
     </>
+  );
+}
+
+/** Vraie interpolation : modules téléchargés la première fois (≈ 25 Mo), avancement affiché. */
+function InterpRow({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  const [st, setSt] = useState<{ installed: boolean; installing: boolean; error: string | null; progress: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let t = 0;
+    const tick = () => stream.interp().then((r) => {
+      if (!alive) return;
+      setSt(r);
+      if (r.installing) t = window.setTimeout(tick, 800);
+    }).catch(() => undefined);
+    tick();
+    return () => { alive = false; window.clearTimeout(t); };
+  }, [on]);
+  const desc = st?.installing ? `Téléchargement des modules… ${Math.round((st.progress || 0) * 100)} %`
+    : st?.error && on ? `Échec : ${st.error}`
+    : "De nouvelles images sont calculées entre celles de la vidéo, comme le « 100 Hz » des téléviseurs : 25 i/s → 50, 50 i/s → 100 (le foot, les chaînes). Jusqu'à la HD ; la 4K passe telle quelle. Demande du processeur. La première fois, deux modules libres sont téléchargés (≈ 25 Mo).";
+  return (
+    <Row title="Interpolation d'images" desc={desc}>
+      <Switch checked={on} onChange={onChange} />
+    </Row>
   );
 }
 

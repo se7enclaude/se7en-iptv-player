@@ -1,12 +1,9 @@
-## se7en IPTV Player 1.4.0
+## se7en IPTV Player 1.5.0
 
-- **Passer l'intro** : l'appli reconnaît le générique d'ouverture d'une série à sa musique. Elle l'apprend dès que tu as vu deux épisodes depuis le début, puis affiche « Passer l'intro » pendant qu'il passe. Aussi quand le fichier a un chapitre « Intro ».
-- **Sous-titres recalés automatiquement** : les sous-titres qui arrivent trop tôt, trop tard ou qui dérivent sont recalés sur les voix du film après quelques minutes. Si tu règles le décalage toi-même, l'appli n'y touche plus.
-- **Télécommande iPhone améliorée** :
-  - cherche un film, une série ou une chaîne et lance-le sur le PC ;
-  - reprends ce que tu regardais, et choisis l'épisode d'une série ;
-  - avance avec la barre de lecture, change de langue ou de sous-titres ;
-  - « Passer l'intro » et « Épisode suivant » depuis le téléphone.
+- **Interpolation d'images** : de nouvelles images sont calculées entre celles de la vidéo, comme le « 100 Hz » des téléviseurs.
+  - 25 i/s → 50 et 50 i/s → 100, pour le foot et les chaînes ; jamais plus que la fréquence de ton écran.
+  - Jusqu'à la HD ; la 4K passe telle quelle.
+  - À activer dans Paramètres › Lecture. La première fois, deux modules libres (VapourSynth et MVTools, ≈ 25 Mo) sont téléchargés depuis PyPI et vérifiés.
 
 Tes listes, tes favoris et tes réglages sont gardés.
 

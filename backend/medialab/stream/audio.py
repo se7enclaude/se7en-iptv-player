@@ -151,15 +151,23 @@ def locate_start(live: np.ndarray, template: np.ndarray, thr: float = 0.86) -> f
     """Où le générique a commencé dans ``live`` (secondes depuis le début de ``live``), ou None.
 
     On cherche le début du générique (ses 8 premières secondes) plutôt qu'un moment quelconque : une chanson se répète,
-    son début se reconnaît sans ambiguïté (juste avant, ce n'est pas le générique). Le plus tôt des meilleurs passages."""
+    son début se reconnaît presque sans ambiguïté. S'il y a plusieurs candidats (refrain qui revient), on garde celui
+    pour lequel tout ce qu'on a entendu depuis ressemble le plus au générique."""
     m = WIN * RATE
     if len(live) < m or len(template) < m:
         return None
     r = _ncc_all(template[:m], live)
     if not len(r) or float(r.max()) < thr:
         return None
-    j = int(np.nonzero(r >= max(thr, float(r.max()) - 0.03))[0][0])
-    return j / RATE
+    cands = [int(j) for j in np.nonzero(r >= max(thr - 0.04, float(r.max()) - 0.08))[0]]
+    best, score = cands[0], -2.0
+    for j in cands:
+        n = min(len(live) - j, len(template))
+        a, b = _z(live[j:j + n]), _z(template[:n])
+        s = float((a * b).mean()) if n >= m else -1.0
+        if s > score + 0.01:  # à égalité, le plus tôt
+            best, score = j, s
+    return best / RATE if score >= thr - 0.06 else None
 
 
 class IntroMemory:

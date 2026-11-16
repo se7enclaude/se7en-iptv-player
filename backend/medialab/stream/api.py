@@ -32,7 +32,7 @@ DEFAULTS = {"output": "ts", "hwdec": "auto-safe", "buffer_s": 10, "buffer_mb": 1
             "sub_lang": "fr,fre,fra", "record_folder": "", "margin_before": 1, "margin_after": 3, "refresh_hours": 12,
             "refresh_on_start": True, "hide_adult": True, "parental_pin": None, "volume": 100, "user_agent": "",
             "language": "fr", "group_quality": True, "quality_pref": "best", "instant_zap": True,
-            "remote": False, "auto_next": True, "smooth": True, "hdr": True, "sub_scale": 1.0, "auto_sync": True}
+            "remote": False, "auto_next": True, "smooth": True, "hdr": True, "sub_scale": 1.0, "auto_sync": True, "interpolation": False}
 
 
 class Session:
@@ -1011,6 +1011,11 @@ def register(app: FastAPI, S) -> None:
             return res
         return await run_in_threadpool(run)
 
+    @app.get("/api/stream/interp")
+    async def interp_status():
+        from . import interp
+        return interp.status()
+
     @app.get("/api/stream/trailer-page")
     async def trailer_page(v: str = ""):
         """La bande-annonce YouTube dans une page à part, ouverte par l'appli à l'adresse « localhost » : YouTube refuse
@@ -1266,7 +1271,16 @@ def register(app: FastAPI, S) -> None:
             if k in DEFAULTS and k != "parental_pin":
                 cur[k] = v
         store.set_meta("settings", cur)
-        if {"smooth", "hdr", "sub_scale"} & set(body):
+        if body.get("interpolation"):
+            from . import interp
+            if not interp.installed():  # première fois : les deux modules sont téléchargés, puis l'option s'applique
+                def install_then_apply():
+                    interp.install()
+                    if interp.installed():
+                        player.apply_video_settings(sess.settings())
+                        player.flash("Interpolation d'images activée", 3)
+                threading.Thread(target=install_then_apply, name="interp-install", daemon=True).start()
+        if {"smooth", "hdr", "sub_scale", "interpolation", "hwdec"} & set(body):
             await run_in_threadpool(player.apply_video_settings, sess.settings())
         return {**sess.settings(), "parental_pin": bool(sess.settings().get("parental_pin"))}
 

@@ -69,6 +69,7 @@ export interface StreamSettings {
   hdr?: boolean;
   sub_scale?: number;
   auto_sync?: boolean;
+  interpolation?: boolean;
   output: string;
   hwdec: string;
   buffer_s: number;
@@ -398,6 +399,7 @@ export const stream = {
   lock: () => api.post(`${S}/parental/lock`),
   parentalPin: (pin: string, new_pin: string) => api.post(`${S}/parental/pin`, { pin, new_pin }),
   settings: () => api.get<StreamSettings>(`${S}/settings`),
+  interp: () => api.get<{ installed: boolean; installing: boolean; error: string | null; progress: number }>(`${S}/interp`),
   trailer: (id: string, title?: string) => api.post<{ ok: boolean; window: boolean }>(`${S}/trailer`, { id, title }),
   saveSettings: (p: Partial<StreamSettings>) => api.patch<StreamSettings>(`${S}/settings`, p),
   exportBackup: (path: string, password: string) => quiet.post<{ path: string; accounts: number }>(`${S}/backup/export`, { path, password }),

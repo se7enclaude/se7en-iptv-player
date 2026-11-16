@@ -837,6 +837,14 @@ def video_options(s: dict) -> dict:
                  gamut_mapping_mode="perceptual", tone_mapping="auto")
     else:
         o.update(target_colorspace_hint="no", hdr_contrast_recovery="0", hdr_compute_peak="auto")
+    # vraie interpolation (images intermédiaires calculées, voir interp.py) : la vidéo décodée doit revenir en mémoire
+    vf = ""
+    if s.get("interpolation"):
+        from . import interp
+        vf = interp.prepare() or ""
+    o["vf"] = vf
+    hw = s.get("hwdec", "auto-safe")
+    o["hwdec"] = ("auto-copy" if hw != "no" else "no") if vf else hw
     return o
 
 

@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.5.0": {
+        "fr": ["Interpolation d'images : de nouvelles images sont calculées entre celles de la vidéo, comme le « 100 Hz » des téléviseurs. 25 i/s → 50 et 50 i/s → 100 pour le foot et les chaînes, jamais plus que la fréquence de ton écran. Jusqu'à la HD ; la 4K passe telle quelle. À activer dans Paramètres › Lecture : la première fois, deux modules libres (VapourSynth et MVTools, ≈ 25 Mo) sont téléchargés et vérifiés."],
+        "en": ["Frame interpolation: new frames are computed between the video's own, like a TV's \"100 Hz\" mode. 25 fps → 50 and 50 fps → 100 for football and channels, never above your screen's refresh rate. Up to HD; 4K plays as is. Turn it on in Settings › Playback: the first time, two free modules (VapourSynth and MVTools, about 25 MB) are downloaded and checked."],
+    },
     "1.4.0": {
         "fr": ["Passer l'intro : l'appli reconnaît le générique d'ouverture d'une série à sa musique (elle l'apprend dès que tu as vu deux épisodes depuis le début) et affiche « Passer l'intro » pendant qu'il passe. Aussi quand le fichier a un chapitre « Intro ».",
                "Sous-titres recalés automatiquement : les sous-titres trouvés en ligne ou ajoutés à la main qui arrivent trop tôt, trop tard ou qui dérivent sont recalés sur les voix du film après quelques minutes (réglable dans Paramètres › Lecture). Si tu règles le décalage toi-même, l'appli n'y touche plus.",

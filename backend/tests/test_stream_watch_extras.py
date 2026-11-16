@@ -176,3 +176,45 @@ def test_sheet_enrichment_calls_the_extras(tmp_path, monkeypatch):
     st = Store(tmp_path / "s.db")
     d = catalog.enrich(st, "acc", "movie", {"id": "10", "name": "|FR| Le Parrain", "tmdb_id": "238"}, "p", True, "best")
     assert seen == [("movie", "238")] and d["imdb_rating"] == 9.2
+
+
+# ------------------------------------------------------------------ vraie interpolation (modules téléchargés)
+def _wheel(files: dict) -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in files.items():
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+def test_interpolation_modules_checked_then_installed(tmp_path, monkeypatch):
+    import hashlib
+    from medialab.stream import interp as I
+    monkeypatch.setattr(I, "home", lambda: tmp_path / "components" / "interpolation")
+    good = {"vapoursynth": _wheel({"vapoursynth/vsscript.dll": b"x", "vapoursynth/vsscript.pdb": b"debug" * 100,
+                                   "vapoursynth-82.dist-info/RECORD": b""}),
+            "vapoursynth-mvtools": _wheel({"vapoursynth/plugins/mvtools.dll": b"y"})}
+
+    def fetch(name, version, bad=False):
+        data = good[name]
+        return {"data": data, "digests": {"sha256": "0" * 64 if bad else hashlib.sha256(data).hexdigest()}}
+
+    I.install(fetch=lambda n, v: fetch(n, v, bad=True))  # empreinte fausse : rien n'est installé
+    assert not I.installed() and "empreinte" in I.status()["error"]
+    I.install(fetch=fetch)
+    assert I.installed() and I.status()["error"] is None
+    h = I.home()
+    assert not (h / "vapoursynth" / "vsscript.pdb").exists() and (h / "interp.vpy").read_text(encoding="utf-8") == I.SCRIPT
+
+
+def test_interpolation_options_need_frames_in_memory(monkeypatch):
+    from medialab.stream import interp as I
+    monkeypatch.setattr(I, "prepare", lambda: "vapoursynth=file=%5%x.vpy")
+    on = P.video_options({"interpolation": True, "hwdec": "auto-safe"})
+    assert on["vf"].startswith("vapoursynth") and on["hwdec"] == "auto-copy"
+    off = P.video_options({"interpolation": False, "hwdec": "auto-safe"})
+    assert off["vf"] == "" and off["hwdec"] == "auto-safe"
+    monkeypatch.setattr(I, "prepare", lambda: None)  # modules absents : lecture normale
+    assert P.video_options({"interpolation": True})["vf"] == ""
