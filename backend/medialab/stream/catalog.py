@@ -322,6 +322,14 @@ def enrich(store: Store, aid: str, typ: str, d: dict, profile: str, show_adult: 
             d["duration"] = f"{tm['runtime'] // 60} h {tm['runtime'] % 60:02d}" if tm["runtime"] >= 60 else f"{tm['runtime']} min"
     d["genres"] = genres
     d["cast_list"] = cast
+    # sans clé TMDB, ou quand le fournisseur n'a rien : distribution, bande-annonce (Wikidata) et note IMDb
+    try:
+        from . import extras
+        w = store.one("SELECT tmdb FROM works WHERE account=? AND type=? AND id=?", (aid, typ, d["id"])) or {}
+        extras.fill(store, typ, d, d.get("tmdb_id") or w.get("tmdb"))
+    except Exception:  # noqa: BLE001 — une fiche s'ouvre toujours, même sans ces compléments
+        import logging
+        logging.getLogger("medialab.stream.extras").info("Extras unavailable", exc_info=True)
     d["variants"] = variants_of(store, aid, typ, d["id"])
     d["similar"] = similar(store, aid, typ, d, profile, show_adult, quality, (tm or {}).get("recommended") or [], genres)
     return d

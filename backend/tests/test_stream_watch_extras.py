@@ -165,3 +165,14 @@ def test_imdb_ratings_file_and_sheet_fill(tmp_path, monkeypatch):
     # gardé : pas de deuxième appel à Wikidata
     d2 = E.fill(st, "movie", {}, "238", fetch=lambda q: (_ for _ in ()).throw(AssertionError("appel inutile")))
     assert d2["imdb"] == "tt0068646"
+
+
+def test_sheet_enrichment_calls_the_extras(tmp_path, monkeypatch):
+    """catalog.enrich complète la fiche (sans clé TMDB) avec la note IMDb, la distribution et la bande-annonce."""
+    from medialab.stream import catalog, tmdb
+    monkeypatch.setattr(tmdb, "details", lambda *a, **k: None)
+    seen = []
+    monkeypatch.setattr(E, "fill", lambda st, typ, d, t, fetch=None: seen.append((typ, t)) or d.update(imdb_rating=9.2) or d)
+    st = Store(tmp_path / "s.db")
+    d = catalog.enrich(st, "acc", "movie", {"id": "10", "name": "|FR| Le Parrain", "tmdb_id": "238"}, "p", True, "best")
+    assert seen == [("movie", "238")] and d["imdb_rating"] == 9.2
