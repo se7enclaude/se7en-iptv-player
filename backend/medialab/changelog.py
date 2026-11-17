@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.6.1": {
+        "fr": ["Films HDR : la luminosité ne saute plus d'un coup en plein film. Elle s'adapte doucement à chaque scène, et une lampe ou un reflet ne fait plus tout bouger."],
+        "en": ["HDR films: brightness no longer jumps suddenly mid-film. It adapts gently to each scene, and a lamp or a reflection no longer throws it off."],
+    },
     "1.6.0": {
         "fr": ["Interface plus lisible : le verre des panneaux est fumé au lieu d'être blanc, les textes sont plus contrastés et un peu plus grands. Les pastilles posées sur les affiches (note, « Film », « Série ») restent lisibles même sur une affiche claire.",
                "Logos des chaînes : fini les carrés blancs. Un logo clair est posé sur une pastille sombre, un logo sombre sur une pastille claire.",
