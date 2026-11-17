@@ -819,7 +819,11 @@ def _next_card(ev: list[str], card: dict, state: dict, W: int, H: int) -> list[d
             {"id": "card_area", "x": x, "y": y, "w": w, "h": h}]
 
 
-AUDIO_PROBE = "@vad:lavfi=[ebur128=metadata=1]"
+TAIL_GUESS_MAX = 360.0  # place habituelle du générique de fin, au plus (secondes avant la fin)
+
+# Le son, mesuré au passage sans le modifier : son volume (ebur128) et sa « couleur » (aspectralstats, fenêtres de 0,17 s).
+AUDIO_PROBE = ("@vad:lavfi=[ebur128=metadata=1,"
+               "aspectralstats=win_size=8192:overlap=0.75:measure=centroid+spread+rolloff+flatness+entropy]")
 
 
 # Mesure de la luminosité de chaque scène, lissée. Réglages par défaut de mpv : moyenne sur 20 images (< 1 s), « changement
@@ -1388,8 +1392,12 @@ class Player:
 
     # ---------------------------------------------------------------- épisode suivant
     def _credits_start(self, dur: float) -> float:
-        """Début du générique de fin : un chapitre « Générique / Credits » s'il y en a, sinon les dernières secondes."""
+        """Début du générique de fin : reconnu au son, sinon un chapitre « Générique / Credits », sinon la place qu'il
+        occupe d'habitude dans cette série, sinon les dernières secondes."""
         it = self.item or {}
+        a = self._aud
+        if a and a.get("id") == it.get("id") and a.get("outro"):
+            return float(a["outro"])
         if "credits_at" not in it:
             at = None
             try:
@@ -1401,7 +1409,12 @@ class Player:
             except Exception:  # noqa: BLE001
                 pass
             it["credits_at"] = at
-        return it["credits_at"] or dur - max(25.0, min(90.0, dur * 0.03))
+        if it["credits_at"]:
+            return it["credits_at"]
+        tpl = a.get("otpl") if a and a.get("id") == it.get("id") else None
+        if tpl and 20 <= tpl[2] <= min(TAIL_GUESS_MAX, dur * 0.25):
+            return dur - tpl[2]
+        return dur - max(25.0, min(90.0, dur * 0.03))
 
     def _next_state(self, st: dict) -> dict | None:
         """La carte « Épisode suivant » à afficher (ou rien), et le lancement quand le compte à rebours est fini."""
@@ -1444,11 +1457,14 @@ class Player:
 
     # ---------------------------------------------------------------- le son : intro, sous-titres
     def _audio_loop(self) -> None:
-        """Volume du son 10 fois par seconde (filtre @vad), rangé par instant du film."""
+        """Le son 10 fois par seconde (filtre @vad) : volume et empreinte, rangés par instant du film."""
         n = 0
         while True:
             time.sleep(0.1)
             m, it = self.mpv, self.item
+            a = self._aud
+            if a is not None and (not it or a.get("id") != it.get("id")):
+                self._learn_tail(a)  # épisode quitté (suivant, arrêt) : ce qu'on a entendu de sa fin
             if m is None or not it or it.get("kind") not in ("movie", "episode"):
                 continue
             try:
@@ -1463,9 +1479,15 @@ class Player:
                 continue
             a = self._aud
             if a is None or a.get("id") != it.get("id"):
-                a = self._aud = {"id": it.get("id"), "samples": {}, "intro": None, "tpl": None, "learned": False,
+                a = self._aud = {"id": it.get("id"), "samples": {}, "spec": {}, "intro": None, "tpl": None,
+                                 "learned": False, "outro": None, "otpl": None, "tail_done": False, "dur": 0.0,
+                                 "series": it.get("series"), "kind": it.get("kind"), "acc": self.account_id(),
                                  "synced": {}, "manual": False, "skipped": False}
-            a["samples"][int(round((float(t) - 0.1) * audio.RATE))] = val
+            k = int(round((float(t) - 0.1) * audio.RATE))
+            a["samples"][k] = val
+            f = audio.feature(md)
+            if f is not None:
+                a["spec"][k] = f
             n += 1
             if n % 10 == 0:
                 try:
@@ -1474,29 +1496,81 @@ class Player:
                     log.debug("audio: %s", e)
 
     def _audio_tick(self, a: dict, t: float) -> None:
-        """Toutes les secondes : reconnaître le générique, apprendre celui de la série, recaler les sous-titres."""
+        """Toutes les secondes : reconnaître les génériques, apprendre ceux de la série, recaler les sous-titres."""
         it = self.item or {}
-        acc, series = self.account_id(), it.get("series")
-        if it.get("kind") == "episode" and series and self.intro_mem is not None and t < audio.HEAD + 60:
+        acc, series = a["acc"], a["series"]
+        mem = self.intro_mem
+        if a["kind"] == "episode" and series and mem is not None:
+            try:
+                a["dur"] = float(self.mpv.duration or 0) or a["dur"]
+            except Exception:  # noqa: BLE001
+                pass
+            dur = a["dur"]
             if a["tpl"] is None:
-                a["tpl"] = self.intro_mem.template(acc, series) or False
-            if a["tpl"] and not a["skipped"] and (a["intro"] is None or t > a["intro"]):
-                tpl, dur = a["tpl"]
-                k = int(t * audio.RATE)
-                k0 = max(0, k - 40 * audio.RATE)  # les 40 dernières secondes entendues
-                live = audio.envelope({i - k0: v for i, v in a["samples"].items() if k0 <= i <= k})
-                start = audio.locate_start(live, tpl)
-                if start is not None and k0 / audio.RATE + start + dur - t > 4:
-                    a["intro"] = k0 / audio.RATE + start + dur  # fin du générique (instant du film)
+                a["tpl"] = mem.template(acc, series, "head") or False
+            if a["otpl"] is None:
+                a["otpl"] = mem.template(acc, series, "tail") or False
+            R = audio.RATE
+            k = int(t * R)
+            # générique d'ouverture : reconnu dans les 40 dernières secondes entendues
+            # recalculé chaque seconde tant que son début est dans les 40 s entendues : plus on en a entendu, plus la fin
+            # est sûre (une estimation qui saute ailleurs, sur un refrain, est ignorée)
+            if a["tpl"] and not a["skipped"] and t < audio.HEAD + 60:
+                tpl, idur, _at = a["tpl"]
+                prev = a["intro"]
+                if prev is None or t < prev - idur + 30:
+                    k0 = max(0, k - 40 * R)
+                    start = audio.locate_start(audio.features(a["spec"], k0, k + 1), tpl)
+                    end = None if start is None else k0 / R + start + idur  # fin du générique (instant du film)
+                    if end is not None and end - t > 4 and (prev is None or abs(end - prev) <= 4):
+                        a["intro"] = end
             if not a["learned"] and t >= audio.HEAD:
                 a["learned"] = True
-                head = audio.envelope(a["samples"], until=audio.HEAD)
-                measured = sum(1 for i in a["samples"] if i < audio.HEAD * audio.RATE)
-                if measured > 0.35 * audio.HEAD * audio.RATE:  # vu depuis le début : on peut s'en servir
-                    threading.Thread(target=self.intro_mem.learn, args=(acc, series, str(it.get("id")), head),
+                if audio.measured(a["spec"], 0, audio.HEAD * R) > 0.35:  # vu depuis le début : on peut s'en servir
+                    head = audio.features(a["spec"], 0, audio.HEAD * R)
+                    threading.Thread(target=self._learned, args=(a, "head", head, 0.0, dur),
                                      name="intro-learn", daemon=True).start()
+            # générique de fin : reconnu pendant qu'il passe
+            if dur > 300 and t > dur - audio.TAIL:
+                if a["otpl"] and a["outro"] is None:
+                    k0 = max(int((dur - audio.TAIL) * R), k - 40 * R)
+                    start = audio.locate_start(audio.features(a["spec"], k0, k + 1), a["otpl"][0])
+                    if start is not None:
+                        a["outro"] = k0 / R + start
+                        log.info("End credits recognised at %.0f s", a["outro"])
+                if t > dur - 3:
+                    self._learn_tail(a)
+            if a["intro"] and it.get("id") == a["id"] and not a.get("intro_logged"):
+                a["intro_logged"] = True
+                log.info("Opening credits recognised, end at %.0f s", a["intro"])
         if self.settings().get("auto_sync", True) and not a["manual"] and int(t) % 20 == 0:
             self._resync(a)
+
+    def _learned(self, a: dict, part: str, data, origin: float, dur: float) -> None:
+        try:
+            got = self.intro_mem.learn(a["acc"], a["series"], str(a["id"]), part, data, origin, dur)
+        except Exception as e:  # noqa: BLE001
+            log.debug("intro learn: %s", e)
+            return
+        if got:
+            log.info("%s credits learnt: %.0f s long (%s)", "Opening" if part == "head" else "End", got[1], a["series"])
+
+    def _learn_tail(self, a: dict) -> None:
+        """La fin de l'épisode qu'on a entendue (au moins 2 minutes des 7 dernières) sert à trouver le générique de fin."""
+        if a.get("tail_done") or a.get("kind") != "episode" or not a.get("series") or self.intro_mem is None:
+            return
+        a["tail_done"] = True
+        dur = float(a.get("dur") or 0)
+        if dur < 600:
+            return
+        R = audio.RATE
+        k0 = int((dur - audio.TAIL) * R)
+        last = max((k for k in a["spec"] if k >= k0), default=None)
+        if last is None or last - k0 < 120 * R or audio.measured(a["spec"], k0, last) < 0.6:
+            return
+        tail = audio.features(a["spec"], k0)
+        threading.Thread(target=self._learned, args=(a, "tail", tail, dur - audio.TAIL, dur),
+                         name="outro-learn", daemon=True).start()
 
     def _resync(self, a: dict) -> None:
         m = self.mpv

@@ -2,6 +2,12 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.6.2": {
+        "fr": ["Passer l'intro : le générique d'une série est enfin reconnu de façon fiable. L'appli écoute maintenant la « couleur » du son, pas seulement son volume, retrouve le générique même après un long avant-générique (jusqu'à 10 minutes) et ne se laisse plus tromper par une musique qui tourne en boucle. Elle l'apprend après deux épisodes vus depuis le début.",
+               "Générique de fin : il est appris de la même façon. La carte « Épisode suivant » arrive au vrai début du générique au lieu d'une minute et demie avant la fin au hasard."],
+        "en": ["Skip intro: a series' opening credits are now recognised reliably. The app listens to the \"colour\" of the sound, not just its volume, finds the credits even after a long cold open (up to 10 minutes) and is no longer fooled by looping music. It learns them after two episodes watched from the start.",
+               "End credits: learnt the same way. The \"Next episode\" card now shows up when the credits actually start, instead of a guessed minute and a half before the end."],
+    },
     "1.6.1": {
         "fr": ["Films HDR : la luminosité ne saute plus d'un coup en plein film. Elle s'adapte doucement à chaque scène, et une lampe ou un reflet ne fait plus tout bouger."],
         "en": ["HDR films: brightness no longer jumps suddenly mid-film. It adapts gently to each scene, and a lamp or a reflection no longer throws it off."],
