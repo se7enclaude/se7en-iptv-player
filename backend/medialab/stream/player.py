@@ -822,6 +822,15 @@ def _next_card(ev: list[str], card: dict, state: dict, W: int, H: int) -> list[d
 AUDIO_PROBE = "@vad:lavfi=[ebur128=metadata=1]"
 
 
+# Mesure de la luminosité de chaque scène, lissée. Réglages par défaut de mpv : moyenne sur 20 images (< 1 s), « changement
+# de scène » dès 1 à 3 dB d'écart (le niveau saute alors d'un coup) et pic pris sur le pixel le plus clair (une lampe,
+# un reflet suffisent à tout faire bouger). D'où, de temps en temps en plein film, une image qui s'éclaircit ou
+# s'assombrit brusquement « comme si elle se recalibrait ». Ici : adaptation douce sur ~3 s, seuls les vrais
+# changements extrêmes (noir complet → plein soleil) recalent vite, et les petits points très clairs sont ignorés.
+HDR_PEAK_SMOOTHING = {"hdr_peak_decay_rate": "80", "hdr_scene_threshold_low": "8", "hdr_scene_threshold_high": "16",
+                      "hdr_peak_percentile": "99.995"}
+
+
 def video_options(s: dict) -> dict:
     """Image fluide et rendu HDR (réglages de l'appli → options de mpv)."""
     if s.get("smooth", True):
@@ -834,9 +843,9 @@ def video_options(s: dict) -> dict:
         # 4K HDR : écran HDR (Windows en mode HDR) → vraie sortie HDR ; sinon conversion soignée vers ton écran
         # (luminosité de chaque scène mesurée, couleurs gardées, détails des zones claires rendus)
         o.update(target_colorspace_hint="auto", hdr_compute_peak="yes", hdr_contrast_recovery="0.30",
-                 gamut_mapping_mode="perceptual", tone_mapping="auto")
+                 gamut_mapping_mode="perceptual", tone_mapping="auto", **HDR_PEAK_SMOOTHING)
     else:
-        o.update(target_colorspace_hint="no", hdr_contrast_recovery="0", hdr_compute_peak="auto")
+        o.update(target_colorspace_hint="no", hdr_contrast_recovery="0", hdr_compute_peak="auto", **HDR_PEAK_SMOOTHING)
     # vraie interpolation (images intermédiaires calculées, voir interp.py) : la vidéo décodée doit revenir en mémoire
     vf = ""
     if s.get("interpolation"):

@@ -133,6 +133,9 @@ def test_smooth_and_hdr_options():
     assert on["interpolation"] == "yes" and on["video_sync"] == "display-resample" and on["target_colorspace_hint"] == "auto"
     off = P.video_options({"smooth": False, "hdr": False})
     assert off["interpolation"] == "no" and off["target_colorspace_hint"] == "no"
+    # luminosité HDR lissée : plus de sauts brusques en plein film
+    assert float(on["hdr_peak_decay_rate"]) >= 60 and float(on["hdr_scene_threshold_low"]) >= 6
+    assert float(on["hdr_peak_percentile"]) > 99
 
 
 # ------------------------------------------------------------------ fiches
