@@ -33,15 +33,22 @@ export function CategoryList({ cats, value, onChange, onLocked }: { cats: Catego
   );
 }
 
+/** « HD · SD » sans doublons ni « ? » ; « 3 versions » quand la qualité n'est pas connue. */
+function versionsLabel(variants: { quality?: string | null }[]): string {
+  const known = [...new Set(variants.map((v) => v.quality).filter(Boolean))];
+  return known.length ? known.join(" · ") : `${variants.length} versions`;
+}
+
 function ChannelRow({ ch, on, onClick, onFav, now }: { ch: Item; on: boolean; onClick: () => void; onFav: () => void; now: number }) {
   return (
-    <div className={clsx("st-ch", on && "on")} onClick={onClick} role="button">
+    <div className={clsx("st-ch", on && "on")} onClick={onClick} role="button" tabIndex={0} aria-current={on || undefined}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick(); } }}>
       <span className="st-ch-num mono">{ch.num ?? ""}</span>
       <Logo src={ch.logo} name={ch.name} size={40} />
       <span className="st-ch-text">
         <span className="st-ch-name">
           {ch.name}
-          {!!ch.variants?.length && <span className="st-q-mini">{ch.variants.map((v) => v.quality || "?").join(" · ")}</span>}
+          {!!ch.variants?.length && <span className="st-q-mini">{versionsLabel(ch.variants)}</span>}
         </span>
         {ch.now ? (
           <>
@@ -76,7 +83,16 @@ const ChannelGuide = memo(function ChannelGuide({ ch, now }: { ch: Item; now: nu
     if (el && listRef.current) listRef.current.scrollTop = el.offsetTop - 60;
   }, [progs]);
   const archiveFrom = ch.archive ? now - (ch.archive_days || 1) * 86400 : Infinity;
-  if (progs === null) return <div className="st-guide-list muted" style={{ padding: 20 }}>Chargement du guide…</div>;
+  if (progs === null) return (
+    <div className="st-guide-list" aria-busy="true" aria-label="Chargement du guide">
+      {[0, 1, 2, 3, 4].map((k) => (
+        <div key={k} className="st-skel-prog">
+          <span className="st-skel" />
+          <span className="st-skel-lines"><span className="st-skel" style={{ width: `${70 - k * 8}%`, height: 13 }} /><span className="st-skel" style={{ width: "45%", height: 10 }} /></span>
+        </div>
+      ))}
+    </div>
+  );
   if (!progs.length) return <div className="st-guide-list muted" style={{ padding: 20 }}>Pas de guide des programmes pour cette chaîne.</div>;
   let lastDay = "";
   return (
@@ -147,6 +163,7 @@ export function LivePage() {
   const theater = useStream((s) => s.theater);
   const [cats, setCats] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [loaded, setLoaded] = useState(false); // première liste reçue : avant, on montre des lignes vides animées
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Item | null>(null);
@@ -169,6 +186,7 @@ export function LivePage() {
     try {
       const r = await stream.items("live", { category, q, offset, limit: 300 });
       if (id !== gen.current) return; // une liste plus récente a été demandée entre-temps
+      setLoaded(true);
       setTotal(r.total);
       setItems((cur) => (!offset ? r.items : cur.length === offset ? [...cur, ...r.items] : cur));
     } catch (e) {
@@ -277,8 +295,14 @@ export function LivePage() {
                 onFav={() => toggleFav("live", c.id, !c.fav, () => setItems((cur) => cur.map((x) => (x.id === c.id ? { ...x, fav: !c.fav } : x))))} />
             )}
           />
+        ) : !loaded ? (
+          <div className="st-vlist" aria-busy="true" aria-label="Chargement des chaînes">
+            {Array.from({ length: 8 }, (_, k) => (
+              <div key={k} className="st-ch st-ch-skel"><span className="st-skel st-skel-logo" /><span className="st-skel-lines"><span className="st-skel" style={{ width: `${62 - (k % 3) * 12}%`, height: 12 }} /><span className="st-skel" style={{ width: "40%", height: 10 }} /></span></div>
+            ))}
+          </div>
         ) : (
-          <div className="muted" style={{ padding: 24, textAlign: "center" }}>{q ? "Aucune chaîne trouvée." : category === "__fav" ? "Ajoute des chaînes en favori avec l'étoile." : "Aucune chaîne ici."}</div>
+          <div className="muted st-list-empty">{q ? "Aucune chaîne trouvée." : category === "__fav" ? "Ajoute des chaînes en favori avec l'étoile." : "Aucune chaîne ici."}</div>
         )}
       </section>
       <section className="st-col st-col-main">

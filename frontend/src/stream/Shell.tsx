@@ -15,7 +15,6 @@ export function Ambient() {
     <div className="sx-ambient" aria-hidden>
       {art && <div className="sx-ambient-art" style={{ backgroundImage: `url("${pic(art, 96)}")` }} />}
       <div className="sx-ambient-shade" />
-      <div className="sx-ambient-lamp" />
     </div>
   );
 }
@@ -144,6 +143,7 @@ export function TopBar() {
       <label className="ip-input ip-input--search sx-search">
         <Search size={18} strokeWidth={1.75} />
         <input
+          aria-label="Rechercher"
           className="ip-input__el"
           placeholder={hasAccount ? "Rechercher…" : "se7en IPTV Player"}
           disabled={!hasAccount}
@@ -173,7 +173,7 @@ export function TopBar() {
         {syncing && !now && <span className="ip-badge ip-badge--glass" title={syncing.label}>Mise à jour · {Math.round(syncing.percent)} %</span>}
         {now && !onPlayer && (
           <span className="ip-btn ip-btn--glass sx-now">
-            <button type="button" className="ip-input__btn" style={{ display: "inline-flex", alignItems: "center", gap: 8, margin: 0 }} onClick={() => setPage(now.kind === "live" ? "live" : "watch")}>
+            <button type="button" className="ip-input__btn sx-now-open" onClick={() => setPage(now.kind === "live" ? "live" : "watch")} title={`Revenir à : ${now.title}`}>
               <Play size={13} fill="currentColor" /> <span className="sx-now-title">{now.title}</span>
             </button>
             <button type="button" className="ip-iconbtn ip-iconbtn--ghost ip-iconbtn--sm" onClick={() => useStream.getState().stop()} aria-label="Arrêter"><Square size={12} /></button>

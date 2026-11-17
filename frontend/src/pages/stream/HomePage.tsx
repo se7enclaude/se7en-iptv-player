@@ -4,7 +4,7 @@ import { usePageActive } from "../../hooks/usePageActive";
 import { useApp } from "../../store/app";
 import { Category, Home, Item, Programme, pic, stream } from "../../stream/api";
 import { AccountForm } from "../../stream/AccountForm";
-import { Bar, Img, Logo, PlayDisc, Poster, progressOf, toggleFav, useNow } from "../../stream/components";
+import { Bar, Img, ItemMeta, Logo, PlayDisc, Poster, progressOf, toggleFav, useNow } from "../../stream/components";
 import { toastError, useStream } from "../../stream/store";
 import { MovieModal, SeriesModal, playEpisode } from "./VodPage";
 
@@ -77,18 +77,18 @@ function Hero({ items, index, setIndex, info, onOpen, onPlay, onFav }: { items: 
 
 function LikeCard({ it, onOpen, onPlay }: { it: Featured; onOpen: () => void; onPlay: () => void }) {
   const chip = it.kind === "movie" ? "Film" : "Série";
-  const desc = it.plot || [it.year, it.rating ? `★ ${Number(it.rating).toFixed(1)}` : null].filter(Boolean).join(" · ");
+  const meta = <ItemMeta year={it.year} rating={it.rating} />;
   return (
     <button type="button" className="sx-like" onClick={onOpen} title={it.name}>
       <Img src={it.logo} width={260} fallback={<span className="st-poster-fallback">{it.name}</span>} />
       <span className="st-poster-scrim" />
-      <span className="ip-iconbtn ip-iconbtn--scrim ip-iconbtn--sm sx-like-more" aria-hidden><Ellipsis size={15} /></span>
       <span className="sx-like-body">
         <span className="ip-chip ip-chip--sm ip-chip--static sx-like-chip">{chip}</span>
         <span className="sx-like-row">
           <span className="sx-like-text">
-            <span className="sx-like-title">{it.name}{it.year ? ` (${it.year})` : ""}</span>
-            {desc && <span className="sx-like-desc">{desc}</span>}
+            <span className="sx-like-title">{it.name}</span>
+            {meta}
+            {it.plot && <span className="sx-like-desc">{it.plot}</span>}
           </span>
           <PlayDisc onClick={onPlay} />
         </span>
@@ -110,7 +110,7 @@ function Rail({ title, icon, items, kind, onOpen, onPlay, more }: { title: strin
       <div className="st-row-items sx-rail">
         {items.map((it) => (
           <Poster key={it.id} src={it.logo} name={it.name} progress={it.progress}
-            sub={[it.year, it.rating ? `★ ${Number(it.rating).toFixed(1)}` : null].filter(Boolean).join(" · ") || undefined}
+            sub={it.year || it.rating ? <ItemMeta year={it.year} rating={it.rating} /> : undefined}
             onClick={() => onOpen({ ...it, kind })} onPlay={() => onPlay({ ...it, kind })} />
         ))}
       </div>

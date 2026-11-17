@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { ChevronDown, Languages, Play, Star } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 import { CastMember, pic, SimilarItem, stream, Variant, WorkVersion } from "./api";
-import { Poster, QualityPicker } from "./components";
+import { ItemMeta, Poster, QualityPicker } from "./components";
 import { Button } from "../components/ui";
 
 /** Film / series sheet head: backdrop, poster, facts, genres, the versions (SD / HD / 4K), plot, people, actions. */
@@ -62,7 +62,7 @@ export function RatingFact({ imdb, votes, rating }: { imdb?: number | null; vote
     const v = votes ? (votes >= 1e6 ? `${(votes / 1e6).toFixed(1).replace(".", ",")} M` : votes >= 1e3 ? `${Math.round(votes / 1e3)} k` : `${votes}`) : "";
     return <span className="st-imdb" title={votes ? `${votes.toLocaleString("fr-FR")} votes sur IMDb` : "Note IMDb"}><b>IMDb</b> {imdb.toFixed(1).replace(".", ",")}{v && <i> · {v}</i>}</span>;
   }
-  if (rating) return <><Star size={12} /> {Number(rating).toFixed(1)}</>;
+  if (rating) return <span className="st-meta-rating"><Star size={12} fill="currentColor" strokeWidth={0} />{Number(rating).toFixed(1).replace(".", ",")}</span>;
   return null;
 }
 
@@ -98,7 +98,7 @@ export function SimilarRow({ items, onOpen, title = "Titres similaires" }: { ite
         {items.map((s) => (
           <div key={s.id} className="st-similar-item">
             <Poster src={s.logo} name={s.name} progress={s.progress ?? undefined} onClick={() => onOpen(s.id)}
-              sub={[s.year, s.rating ? <><Star size={10} /> {Number(s.rating).toFixed(1)}</> : null].filter(Boolean).map((x, k) => <span key={k}>{k ? " · " : ""}{x}</span>)} />
+              sub={s.year || s.rating ? <ItemMeta year={s.year} rating={s.rating} /> : undefined} />
           </div>
         ))}
       </div>

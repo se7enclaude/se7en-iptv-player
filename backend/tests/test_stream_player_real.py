@@ -55,3 +55,28 @@ def test_position_tracks_and_switching_with_real_mpv(multi_mkv):
     finally:
         p.mpv.terminate()
         p.mpv = None
+
+
+def test_still_of_the_current_frame_with_real_mpv(multi_mkv):
+    """L'image montrée floutée quand une fenêtre recouvre la vidéo : un petit JPEG de l'image en cours."""
+    if P.mpv_dir() is None:
+        pytest.skip("libmpv absent")
+    mpv = P._mpv()
+    p = P.Player("t", lambda: {})
+    assert p.still() is None  # rien ne joue
+    p.mpv = mpv.MPV(vo="null", ao="null", config="no", load_scripts="no")
+    p.item = {"kind": "movie", "id": "1", "title": "Film"}
+    try:
+        p.mpv.play(str(multi_mkv))
+        for _ in range(100):
+            if (p.mpv.time_pos or 0) > 0.5:
+                break
+            time.sleep(0.05)
+        data = p.still(width=120)
+        assert data and data[:2] == b"\xff\xd8"  # JPEG
+        from io import BytesIO
+        from PIL import Image
+        assert Image.open(BytesIO(data)).width == 120
+    finally:
+        p.mpv.terminate()
+        p.mpv = None

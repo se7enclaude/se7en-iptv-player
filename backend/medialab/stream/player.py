@@ -1236,6 +1236,26 @@ class Player:
             self.mpv.command("sub-add", path, "select" if select else "auto", title, lang)
             return True
 
+    def still(self, width: int = 480) -> bytes | None:
+        """L'image en cours, petite, en JPEG : l'interface la montre floutée quand une fenêtre recouvre la vidéo (la
+        vraie vidéo est une fenêtre à part que la page ne peut pas recouvrir)."""
+        with self.lock:
+            if self.mpv is None or not self.item:
+                return None
+            try:
+                img = self.mpv.screenshot_raw("video")
+            except Exception:  # noqa: BLE001 - pas encore d'image, flux coupé…
+                return None
+        if img is None or not img.width:
+            return None
+        import io
+        img = img.convert("RGB")
+        if img.width > width:
+            img = img.resize((width, max(1, round(img.height * width / img.width))))
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=70)
+        return out.getvalue()
+
     def screenshot(self) -> str | None:
         if self.mpv is None or not self.item:
             return None

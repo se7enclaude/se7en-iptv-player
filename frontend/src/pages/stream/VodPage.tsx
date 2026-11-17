@@ -171,6 +171,7 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
   const [sort, setSort] = useState("default");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Item[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [total, setTotal] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [unlock, setUnlock] = useState(false);
@@ -191,6 +192,7 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
     try {
       const r = await stream.items(kind, { category: cat, q, offset, limit: 120, sort });
       if (id !== gen.current) return;
+      setLoaded(true);
       setTotal(r.total);
       setItems((cur) => (!offset ? r.items : cur.length === offset ? [...cur, ...r.items] : cur));
     } catch (e) {
@@ -233,17 +235,21 @@ export function VodPage({ kind }: { kind: "movie" | "series" }) {
           }}>
             {items.map((it) => (
               <Poster key={it.id} src={it.logo} name={it.name} progress={it.progress} onClick={() => setOpen(it.id)}
-                badge={it.rating || it.variants?.length ? (
+                badge={it.rating || it.variants?.some((v) => v.quality) ? (
                   <>
-                    {it.rating ? <><Star size={10} /> {Number(it.rating).toFixed(1)}</> : null}
-                    {it.variants?.length ? <span className="st-badge-q">{it.variants.map((v) => v.quality).filter(Boolean).join(" · ")}</span> : null}
+                    {it.rating ? <><Star size={10} fill="currentColor" strokeWidth={0} /> {Number(it.rating).toFixed(1).replace(".", ",")}</> : null}
+                    {it.variants?.some((v) => v.quality) ? <span className="st-badge-q">{[...new Set(it.variants.map((v) => v.quality).filter(Boolean))].join(" · ")}</span> : null}
                   </>
                 ) : undefined}
                 sub={it.year ?? undefined} />
             ))}
           </div>
+        ) : !loaded ? (
+          <div className="st-grid" aria-busy="true" aria-label="Chargement">
+            {Array.from({ length: 12 }, (_, k) => <span key={k} className="st-poster st-poster-skel"><span className="st-poster-img st-skel" /></span>)}
+          </div>
         ) : (
-          <Empty icon={<Clapperboard size={22} />} title={q ? "Rien trouvé" : cat === "__fav" ? "Pas encore de favoris" : `Aucun ${kind === "movie" ? "film" : "série"} ici`}
+          <Empty icon={<Clapperboard size={22} />} title={q ? "Rien trouvé" : cat === "__fav" ? "Pas encore de favoris" : kind === "movie" ? "Aucun film ici" : "Aucune série ici"}
             body={cat === "__fav" ? "Ouvre une fiche et ajoute-la en favori." : undefined} />
         )}
       </section>

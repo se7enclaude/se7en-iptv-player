@@ -24,9 +24,9 @@
 --surface-scrim:rgba(5,6,8,.72);
 
 --text-primary:var(--white);
---text-secondary:var(--white-a72);
---text-tertiary:var(--white-a52);
---text-disabled:var(--white-a32);
+--text-secondary:rgba(255,255,255,.80);
+--text-tertiary:rgba(255,255,255,.64);
+--text-disabled:rgba(255,255,255,.40);
 --text-inverse:var(--ink-950);
 --text-accent:var(--red-400);
 

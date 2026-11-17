@@ -2,6 +2,22 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "1.6.0": {
+        "fr": ["Interface plus lisible : le verre des panneaux est fumé au lieu d'être blanc, les textes sont plus contrastés et un peu plus grands. Les pastilles posées sur les affiches (note, « Film », « Série ») restent lisibles même sur une affiche claire.",
+               "Logos des chaînes : fini les carrés blancs. Un logo clair est posé sur une pastille sombre, un logo sombre sur une pastille claire.",
+               "Titres des films et séries sur deux lignes au lieu d'être coupés, notes avec une vraie étoile.",
+               "Petits écrans : marges réduites, recherche repliée en loupe, catégories toujours visibles (elles disparaissaient sous 1100 px de large).",
+               "Barres de défilement discrètes mais visibles, étoile des favoris toujours affichée, listes de chaînes utilisables au clavier.",
+               "Pendant le chargement, des emplacements animés au lieu de « Aucune chaîne ici ». Dans le guide, le titre d'une émission commencée reste visible.",
+               "Quand une fenêtre s'ouvre par-dessus la vidéo, la dernière image s'affiche floutée au lieu d'un fond noir."],
+        "en": ["Easier to read: panels use smoked glass instead of white, text has more contrast and is a little larger. Badges on posters (rating, \"Film\", \"Series\") stay readable even on light artwork.",
+               "Channel logos: no more white squares. Light logos sit on a dark tile, dark logos on a light one.",
+               "Film and series titles on two lines instead of cut short, ratings with a real star.",
+               "Small screens: tighter margins, search folds into a magnifier, categories always visible (they disappeared below 1100 px).",
+               "Subtle but visible scrollbars, favourite star always shown, channel lists usable with the keyboard.",
+               "While loading, animated placeholders instead of \"No channels here\". In the guide, the title of a programme already under way stays visible.",
+               "When a window opens over the video, the last frame shows blurred instead of a black box."],
+    },
     "1.5.0": {
         "fr": ["Interpolation d'images : de nouvelles images sont calculées entre celles de la vidéo, comme le « 100 Hz » des téléviseurs. 25 i/s → 50 et 50 i/s → 100 pour le foot et les chaînes, jamais plus que la fréquence de ton écran. Jusqu'à la HD ; la 4K passe telle quelle. À activer dans Paramètres › Lecture : la première fois, deux modules libres (VapourSynth et MVTools, ≈ 25 Mo) sont téléchargés et vérifiés."],
         "en": ["Frame interpolation: new frames are computed between the video's own, like a TV's \"100 Hz\" mode. 25 fps → 50 and 50 fps → 100 for football and channels, never above your screen's refresh rate. Up to HD; 4K plays as is. Turn it on in Settings › Playback: the first time, two free modules (VapourSynth and MVTools, about 25 MB) are downloaded and checked."],

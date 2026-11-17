@@ -59,7 +59,7 @@ export function AccountsSettings() {
             <div key={a.id} className={clsx("st-acc", on && "on")}>
               <div className="st-acc-icon">{a.kind === "xtream" ? <KeyRound size={17} /> : <Download size={17} />}</div>
               <div className="st-acc-text">
-                <div className="st-acc-name">{a.name} {on && <Badge tone="accent">Actif</Badge>}</div>
+                <div className="st-acc-name">{a.name} {on && <Badge tone="success">Actif</Badge>}</div>
                 <div className="muted st-small">
                   {a.kind === "xtream" ? "Xtream Codes" : "Liste M3U"}
                   {a.counts && Object.keys(a.counts).length ? ` · ${(a.counts.live ?? 0).toLocaleString("fr-FR")} chaînes · ${(a.counts.movie ?? 0).toLocaleString("fr-FR")} films${a.kind === "xtream" ? ` · ${(a.counts.series ?? 0).toLocaleString("fr-FR")} séries` : ""}` : ""}

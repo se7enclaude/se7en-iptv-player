@@ -702,6 +702,13 @@ def register(app: FastAPI, S) -> None:
         player.place(body.x, body.y, body.w, body.h, body.dpr, body.visible, body.radius)
         return {"ok": True}
 
+    @app.get("/api/stream/player/still")
+    async def player_still():
+        data = await run_in_threadpool(player.still)
+        if not data:
+            return Response(status_code=204)
+        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
     @app.get("/api/stream/player")
     async def player_state():
         st = await run_in_threadpool(player.snapshot)

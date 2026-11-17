@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { Lock, Play, Tv } from "lucide-react";
+import { Lock, Play, Star, Tv } from "lucide-react";
 import { CSSProperties, MouseEvent, ReactNode, UIEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, Modal } from "../components/ui";
+import { token } from "../api/client";
 import { pic, stream, Variant } from "./api";
 import { toastError, useStream } from "./store";
 
@@ -41,7 +42,7 @@ export function useNow(ms = 30000): number {
 // ------------------------------------------------------------------ images
 /** Une image du catalogue : à la bonne taille (cache du moteur), décodée hors du fil principal, qui apparaît en fondu
  * au lieu de surgir. ``fallback`` s'affiche si elle manque ou ne se charge pas. */
-export function Img({ src, width, fallback, className, style }: { src?: string | null; width: number; fallback?: ReactNode; className?: string; style?: CSSProperties }) {
+export function Img({ src, width, fallback, className, style, onReady }: { src?: string | null; width: number; fallback?: ReactNode; className?: string; style?: CSSProperties; onReady?: (img: HTMLImageElement) => void }) {
   const url = pic(src, width);
   const [state, setState] = useState<"wait" | "ok" | "bad">("wait");
   useEffect(() => setState("wait"), [url]);
@@ -49,16 +50,55 @@ export function Img({ src, width, fallback, className, style }: { src?: string |
   return (
     <img src={url} alt="" loading="lazy" decoding="async" draggable={false} referrerPolicy="no-referrer" style={style}
       className={clsx("st-img", state === "ok" && "on", className)}
-      ref={(el) => { if (el && el.complete && el.naturalWidth && state === "wait") setState("ok"); }}
-      onLoad={() => setState("ok")} onError={() => setState("bad")} />
+      ref={(el) => { if (el && el.complete && el.naturalWidth && state === "wait") { setState("ok"); onReady?.(el); } }}
+      onLoad={(e) => { setState("ok"); onReady?.(e.currentTarget); }} onError={() => setState("bad")} />
   );
+}
+
+type LogoTone = "light" | "dark" | "opaque";
+const TONES = new Map<string, LogoTone>();
+
+/** Regarde le logo une fois chargé : un logo clair (blanc sur transparent) va sur une pastille sombre, un logo sombre
+ * sur une pastille claire, un logo qui a déjà son propre fond le remplit. Plus de carrés blancs qui cachent les logos
+ * blancs ni de colonne blanche qui éblouit. */
+function toneOf(img: HTMLImageElement): LogoTone {
+  try {
+    const n = 24;
+    const c = document.createElement("canvas");
+    c.width = c.height = n;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    if (!g) return "light";
+    g.drawImage(img, 0, 0, n, n);
+    const d = g.getImageData(0, 0, n, n).data;
+    let lum = 0, weight = 0, solid = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3] / 255;
+      if (a > 0.9) solid++;
+      if (a < 0.15) continue;
+      lum += a * (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+      weight += a;
+    }
+    if (solid > n * n * 0.92) return "opaque";
+    return weight && lum / weight < 0.42 ? "dark" : "light";
+  } catch {
+    return "light";
+  }
 }
 
 export function Logo({ src, name, size = 40, className }: { src?: string | null; name: string; size?: number; className?: string }) {
   const initials = name.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const key = src || "";
+  const [tone, setTone] = useState<LogoTone | undefined>(() => TONES.get(key));
+  useEffect(() => setTone(TONES.get(key)), [key]);
+  const ready = useCallback((img: HTMLImageElement) => {
+    if (TONES.has(key)) return;
+    const t = toneOf(img);
+    TONES.set(key, t);
+    setTone(t);
+  }, [key]);
   return (
-    <span className={clsx("st-logo", className)} style={{ width: size, height: size }}>
-      <Img src={src} width={size} fallback={<span className="st-logo-txt">{initials || <Tv size={size * 0.45} />}</span>} />
+    <span className={clsx("st-logo", tone && `is-${tone}`, className)} style={{ width: size, height: size }}>
+      <Img src={src} width={size} onReady={ready} fallback={<span className="st-logo-txt">{initials || <Tv size={size * 0.45} />}</span>} />
     </span>
   );
 }
@@ -94,6 +134,19 @@ export function Poster({ src, name, progress, badge, onClick, sub, onPlay }: { s
         </span>
       )}
     </button>
+  );
+}
+
+/** « 2020 · ★ 7,5 » : l'année et la note, avec une vraie icône d'étoile et la virgule française. */
+export function ItemMeta({ year, rating }: { year?: string | number | null; rating?: string | number | null }) {
+  const r = Number(rating);
+  if (!year && !(r > 0)) return null;
+  return (
+    <span className="st-meta-line">
+      {year && <span>{year}</span>}
+      {year && r > 0 && <span aria-hidden>·</span>}
+      {r > 0 && <span className="st-meta-rating"><Star size={11} fill="currentColor" strokeWidth={0} />{r.toFixed(1).replace(".", ",")}</span>}
+    </span>
   );
 }
 
@@ -158,9 +211,21 @@ export function VideoSurface({ className, radius = 22, children, idle }: { class
   return (
     <div ref={ref} className={clsx("st-video", theater && "st-video-theater", className)} onDoubleClick={() => useStream.getState().setTheater(!theater)}>
       {!now && (idle ?? <div className="st-video-idle"><Tv size={34} /><span>Choisis une chaîne</span></div>)}
-      {now && covers > 0 && <div className="st-video-idle"><span>{now.title}</span></div>}
+      {now && covers > 0 && <CoveredStill title={now.title ?? ""} />}
       {children}
     </div>
+  );
+}
+
+/** Ce qu'on voit à la place de la vidéo pendant qu'une fenêtre la recouvre : la dernière image, floutée. */
+function CoveredStill({ title }: { title: string }) {
+  const [url] = useState(() => `/api/stream/player/still?token=${encodeURIComponent(token)}&t=${Date.now()}`);
+  const [ok, setOk] = useState(false);
+  return (
+    <>
+      <img className="st-video-still" src={url} alt="" draggable={false} style={{ opacity: ok ? 1 : 0 }} onLoad={() => setOk(true)} onError={() => setOk(false)} />
+      <div className={clsx("st-video-idle", ok && "has-still")}><span>{title}</span></div>
+    </>
   );
 }
 

@@ -1,9 +1,10 @@
-## se7en IPTV Player 1.5.0
+## se7en IPTV Player 1.6.0
 
-- **Interpolation d'images** : de nouvelles images sont calculées entre celles de la vidéo, comme le « 100 Hz » des téléviseurs.
-  - 25 i/s → 50 et 50 i/s → 100, pour le foot et les chaînes ; jamais plus que la fréquence de ton écran.
-  - Jusqu'à la HD ; la 4K passe telle quelle.
-  - À activer dans Paramètres › Lecture. La première fois, deux modules libres (VapourSynth et MVTools, ≈ 25 Mo) sont téléchargés depuis PyPI et vérifiés.
+- **Interface plus lisible** : verre fumé au lieu de blanc, textes plus contrastés et un peu plus grands, pastilles lisibles même sur une affiche claire.
+- **Logos des chaînes** : plus de carrés blancs ; un logo clair va sur une pastille sombre, un logo sombre sur une pastille claire.
+- **Titres sur deux lignes** au lieu d'être coupés, notes avec une vraie étoile.
+- **Petits écrans** : marges réduites, recherche repliée en loupe, catégories toujours visibles.
+- **Détails** : barres de défilement visibles, étoile des favoris toujours affichée, chaînes au clavier, emplacements animés pendant le chargement, titre des émissions commencées gardé dans le guide, dernière image floutée quand une fenêtre recouvre la vidéo.
 
 Tes listes, tes favoris et tes réglages sont gardés.
 
